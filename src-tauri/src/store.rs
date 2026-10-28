@@ -221,9 +221,9 @@ pub struct Agent {
     pub version: u32,
 }
 
-pub const AGENT_VERSION: u32 = 5;
+pub const AGENT_VERSION: u32 = 6;
 /// Strumenti degli agenti di sistema (le azioni che modificano chiedono conferma)
-pub const STRUMENTI_BASE: &[&str] = &["fs", "shell", "apps", "clipboard", "mail", "calendar", "tasks", "notifications", "media"];
+pub const STRUMENTI_BASE: &[&str] = &["fs", "shell", "apps", "clipboard", "mail", "calendar", "tasks", "notifications", "media", "web"];
 
 impl Default for Agent {
     fn default() -> Self {
@@ -348,7 +348,7 @@ impl Store {
         for mut a in s.agents() {
             if a.version < AGENT_VERSION {
                 if a.system && a.id == "assistente" {
-                    for t in ["fs", "shell", "apps", "clipboard", "mail", "calendar", "tasks", "notifications", "media"] {
+                    for t in ["fs", "shell", "apps", "clipboard", "mail", "calendar", "tasks", "notifications", "media", "web"] {
                         if !a.tools.iter().any(|x| x == t) {
                             a.tools.push(t.to_string());
                         }

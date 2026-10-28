@@ -158,6 +158,9 @@ fn sistema(agent: &Agent, s: &Settings, istruzioni_server: &[(String, String)]) 
         p.push_str("- Alcune azioni richiedono l'approvazione dell'utente: se le nega, non riprovare la stessa azione e chiedi come preferisce procedere.\n");
         p.push_str("- Prima di modificare o spostare file, guarda cosa c'è. Non cancellare mai: al massimo sposta nel Cestino.\n");
         p.push_str("- Alla fine riassumi in poche righe cosa hai fatto.\n");
+        if strumenti.iter().any(|t| t.categoria == "web") {
+            p.push_str("- Puoi cercare sul web. Se non sai qualcosa con certezza, o se l'informazione può essere cambiata dopo il tuo addestramento (notizie, prezzi, orari, versioni di software, persone, aziende, leggi, eventi), cerca prima di rispondere invece di tirare a indovinare; leggi le pagine più affidabili e cita le fonti con i link. Per conoscenze stabili rispondi direttamente.\n");
+        }
         if strumenti.iter().any(|t| t.categoria == "computer") {
             p.push_str("- Puoi vedere e usare lo schermo, ma mouse e tastiera sono dell'utente: usali solo come ultima risorsa. Prima prova file, comandi, gli account, il browser degli agenti (lavora senza finestre) e l'automazione delle app (automazione_app, AppleScript). Se devi usare lo schermo, guarda con uno screenshot prima di agire e controlla dopo le azioni importanti; preferisci le scorciatoie da tastiera affidabili. Se l'utente muove il mouse, fermati e chiedi.\n");
         }
@@ -167,6 +170,27 @@ fn sistema(agent: &Agent, s: &Settings, istruzioni_server: &[(String, String)]) 
         p.push_str(&format!("\nIstruzioni del servizio «{nome}» (strumenti esterni collegati dall'utente):\n{}\n", testo.trim()));
     }
     p
+}
+
+/// Titolo e indirizzo delle fonti citate (o lette) nella risposta, senza doppioni.
+fn fonti_web(raw: &Value) -> Vec<(String, String)> {
+    let mut v: Vec<(String, String)> = vec![];
+    let mut aggiungi = |t: &str, u: &str| {
+        if u.starts_with("http") && !v.iter().any(|(_, x)| x == u) {
+            v.push((if t.trim().is_empty() { u.split('/').nth(2).unwrap_or(u).to_string() } else { t.trim().chars().take(70).collect() }, u.to_string()));
+        }
+    };
+    for b in raw.as_array().into_iter().flatten() {
+        for c in b["citations"].as_array().into_iter().flatten() {
+            aggiungi(c["title"].as_str().unwrap_or_default(), c["url"].as_str().unwrap_or_default());
+        }
+        if b["type"] == "web_fetch_tool_result" {
+            let c = &b["content"];
+            aggiungi(c["content"]["title"].as_str().unwrap_or_default(), c["url"].as_str().unwrap_or_default());
+        }
+    }
+    v.truncate(8);
+    v
 }
 
 /// Crea l'esecuzione, la registra e avvia il ciclo in background.
@@ -406,6 +430,7 @@ async fn esegui(
             let mut on = |d: Delta| match d {
                 Delta::Testo(t) => ctx.timeline.delta("text", &t),
                 Delta::Pensiero(t) => ctx.timeline.delta("thinking", &t),
+                Delta::Nota(t) => ctx.timeline.nota_temporanea(&t),
             };
             let c = providers::claude_code::Chiamata {
                 bin: &bin,
@@ -417,6 +442,7 @@ async fn esegui(
                 sessione: sessione.as_deref(),
                 cartelle_lettura: &cartelle,
                 mcp_config: mcp_config.as_deref(),
+                web: specs.iter().any(|t| t.categoria == "web"),
                 // Copre anche le attese lunghe (Claude nell'editor fino a 20 minuti)
                 timeout_strumenti_s: (agent.policy.approval_timeout_s as u64 + 120).max(1320),
             };
@@ -429,6 +455,11 @@ async fn esegui(
         let (r, _) = risposta?;
         usage.add(&r.usage);
         *modello = Some(r.modello.clone());
+        // Fonti della ricerca web lato server (citazioni e pagine lette): si mostrano sotto la risposta
+        let fonti = fonti_web(&r.raw);
+        if !fonti.is_empty() {
+            ctx.timeline.nota(&format!("Fonti: {}", fonti.iter().map(|(t, u)| format!("[{}]({u})", t.replace(['[', ']'], ""))).collect::<Vec<_>>().join(" · ")));
+        }
         let stop = r.stop.clone();
         let dettagli = r.stop_details.clone();
         messaggi.push(Messaggio { ruolo: Ruolo::Assistente, blocchi: r.blocchi, raw: Some(r.raw), raw_provider: Some("claude-code".into()) });
@@ -476,6 +507,7 @@ async fn esegui(
             let mut on = |d: Delta| match d {
                 Delta::Testo(t) => ctx.timeline.delta("text", &t),
                 Delta::Pensiero(t) => ctx.timeline.delta("thinking", &t),
+                Delta::Nota(t) => ctx.timeline.nota_temporanea(&t),
             };
             providers::stream(&agent.provider, req, &mut on, &ctx.cancel).await
         };
@@ -491,6 +523,11 @@ async fn esegui(
                 _ => None,
             })
             .collect();
+        // Fonti della ricerca web lato server (citazioni e pagine lette): si mostrano sotto la risposta
+        let fonti = fonti_web(&r.raw);
+        if !fonti.is_empty() {
+            ctx.timeline.nota(&format!("Fonti: {}", fonti.iter().map(|(t, u)| format!("[{}]({u})", t.replace(['[', ']'], ""))).collect::<Vec<_>>().join(" · ")));
+        }
         let stop = r.stop.clone();
         let dettagli = r.stop_details.clone();
         messaggi.push(Messaggio { ruolo: Ruolo::Assistente, blocchi: r.blocchi, raw: Some(r.raw), raw_provider: Some(agent.provider.clone()) });
@@ -563,7 +600,7 @@ mod tests {
         };
         let cartelle = vec![base.join("allegati")];
         let c = crate::providers::claude_code::Chiamata {
-            bin: &bin, cwd: &base.join("cwd"), system: "Sei conciso.", prompt: &prompt, modello: "haiku", effort: "", sessione: None, cartelle_lettura: &cartelle,
+            bin: &bin, cwd: &base.join("cwd"), system: "Sei conciso.", prompt: &prompt, modello: "haiku", effort: "", sessione: None, cartelle_lettura: &cartelle, web: false,
             mcp_config: None, timeout_strumenti_s: 300,
         };
         crate::providers::claude_code::stream(c, &mut on, &cancel).await.unwrap();

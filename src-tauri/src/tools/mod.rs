@@ -12,6 +12,7 @@ pub mod posta;
 pub mod processi;
 pub mod shell;
 pub mod sviluppo;
+pub mod web;
 
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -221,6 +222,16 @@ Scrivi una richiesta completa: obiettivo, vincoli, come verificare. Per continua
         nome: "apri_in_editor", etichetta: "Aprire nell'editor", categoria: "dev", rischio: Rischio::Read, parallelo: false, input_grande: false,
         descrizione: "Apre una cartella di progetto o un file (anche a una riga precisa) nell'editor di codice dell'utente.",
         schema: || obj(&[("percorso", s(P)), ("riga", i("Riga a cui posizionarsi (facoltativa)"))], &["percorso"]),
+    },
+    ToolSpec {
+        nome: "cerca_web", etichetta: "Cercare sul web", categoria: "web", rischio: Rischio::Read, parallelo: true, input_grande: false,
+        descrizione: "Cerca sul web e restituisce titoli, indirizzi ed estratti dei risultati. Usalo quando non sai qualcosa con certezza o l'informazione può essere cambiata (notizie, prezzi, orari, versioni, persone, aziende).",
+        schema: || obj(&[("query", s("Cosa cercare: parole chiave precise, anche in inglese se serve")), ("max", i("Quanti risultati (predefinito 8)"))], &["query"]),
+    },
+    ToolSpec {
+        nome: "leggi_pagina", etichetta: "Leggere pagine web", categoria: "web", rischio: Rischio::Read, parallelo: true, input_grande: false,
+        descrizione: "Legge il testo di una pagina web (anche costruita con JavaScript) per rispondere con informazioni precise e citare la fonte.",
+        schema: || obj(&[("url", s("Indirizzo della pagina")), ("max_caratteri", i("Quanto testo al massimo (predefinito 20000)"))], &["url"]),
     },
     ToolSpec {
         nome: "crea_pdf", etichetta: "Creare PDF", categoria: "media", rischio: Rischio::Write, parallelo: false, input_grande: true,
@@ -452,9 +463,11 @@ pub fn catalogo_vista() -> Vec<Value> {
 }
 
 pub fn per_anthropic(specs: &[&ToolSpec]) -> Vec<Value> {
-    // Il controllo dello schermo con Claude usa il toolset nativo, non le funzioni schermo_*
+    // Il controllo dello schermo con Claude usa il toolset nativo, non le funzioni schermo_*;
+    // la ricerca web usa gli strumenti lato server di Anthropic (con citazioni)
     let schermo = specs.iter().any(|t| t.categoria == "computer");
-    let specs: Vec<&&ToolSpec> = specs.iter().filter(|t| t.categoria != "computer").collect();
+    let web = specs.iter().any(|t| t.categoria == "web");
+    let specs: Vec<&&ToolSpec> = specs.iter().filter(|t| t.categoria != "computer" && t.categoria != "web").collect();
     let n = specs.len();
     let mut out: Vec<Value> = specs
         .iter()
@@ -471,6 +484,10 @@ pub fn per_anthropic(specs: &[&ToolSpec]) -> Vec<Value> {
             v
         })
         .collect();
+    if web {
+        out.push(json!({ "type": "web_search_20260318", "name": "web_search", "max_uses": 8, "user_location": { "type": "approximate", "country": "IT", "timezone": "Europe/Rome" } }));
+        out.push(json!({ "type": "web_fetch_20260318", "name": "web_fetch", "max_uses": 10, "citations": { "enabled": true }, "max_content_tokens": 30000 }));
+    }
     if schermo {
         out.push(json!({ "type": "computer_toolset_20260801", "cache_control": { "type": "ephemeral" } }));
     }
@@ -558,6 +575,10 @@ pub async fn esegui(nome: &str, input: &Value, amb: &Ambiente) -> Esito {
         "apri_app" | "apri_percorso" | "apri_url" => apps::esegui(nome, input, amb).await,
         "automazione_app" => apps::automazione(input, &amb.cancel).await,
         "crea_pdf" | "crea_presentazione" | "genera_immagine" | "crea_video" => media::esegui(nome, input, &amb.radici).await,
+        "cerca_web" | "leggi_pagina" => {
+            let profilo = tauri::Manager::path(&amb.app).app_data_dir().map(|d| d.join("browser")).unwrap_or_default();
+            web::esegui(nome, input, &profilo, &[]).await
+        }
         "leggi_appunti" | "scrivi_appunti" => {
             let (nome, input) = (nome.to_string(), input.clone());
             tokio::task::spawn_blocking(move || appunti::esegui(&nome, &input)).await.unwrap_or_else(|e| Esito::errore(e.to_string()))
@@ -631,6 +652,8 @@ pub fn titolo(nome: &str, input: &Value) -> String {
         "web_invia_form" => "Invia il modulo".into(),
         "web_indietro" => "Torna indietro".into(),
         "apri_app" => format!("Apre {}", a("nome")),
+        "cerca_web" => format!("Cerca sul web «{}»", a("query")),
+        "leggi_pagina" => format!("Legge {}", a("url").split('/').nth(2).unwrap_or(a("url"))),
         "crea_pdf" => format!("Crea il PDF {}", if a("titolo").is_empty() { breve(a("uscita")) } else { a("titolo").to_string() }),
         "crea_presentazione" => format!("Crea la presentazione {}", breve(a("uscita"))),
         "genera_immagine" => format!("Genera «{}»", a("prompt").chars().take(60).collect::<String>()),

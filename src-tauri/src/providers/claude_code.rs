@@ -25,6 +25,8 @@ pub struct Chiamata<'a> {
     pub sessione: Option<&'a str>,
     /// Cartelle che Claude Code può leggere con il suo strumento Read (gli allegati). Il resto del disco gli resta negato.
     pub cartelle_lettura: &'a [PathBuf],
+    /// Ricerca e lettura di pagine web con gli strumenti di Claude Code
+    pub web: bool,
     /// Configurazione del server MCP di Oltremare (strumenti sul computer), se l'agente ne ha
     pub mcp_config: Option<&'a str>,
     /// Quanto può durare una chiamata a uno strumento (attesa dell'approvazione compresa)
@@ -148,21 +150,31 @@ pub async fn stream(c: Chiamata<'_>, on: &mut (dyn FnMut(Delta) + Send), cancel:
     if let Some(id) = c.sessione {
         cmd.args(["--resume", id]);
     }
+    // Strumenti autorizzati senza conferma: quelli di Oltremare (regole e approvazioni le applica Oltremare)
+    // e, se l'agente cerca sul web, ricerca e lettura di pagine (solo letture)
+    let mut autorizzati: Vec<&str> = vec![];
     if let Some(cfg) = c.mcp_config {
-        // Strumenti di Oltremare: autorizzati qui, perché regole e approvazioni le applica Oltremare
-        cmd.args(["--mcp-config", cfg, "--allowedTools", "mcp__oltremare"])
-            .env("MCP_TOOL_TIMEOUT", (c.timeout_strumenti_s * 1000).to_string())
-            .env("MCP_TIMEOUT", "20000");
+        cmd.args(["--mcp-config", cfg]).env("MCP_TOOL_TIMEOUT", (c.timeout_strumenti_s * 1000).to_string()).env("MCP_TIMEOUT", "20000");
+        autorizzati.push("mcp__oltremare");
     }
-    // Degli strumenti di Claude Code resta al massimo Read, solo sulle cartelle degli allegati
-    if c.cartelle_lettura.is_empty() {
-        cmd.args(["--tools", ""]);
-    } else {
-        cmd.args(["--tools", "Read"]);
+    if c.web {
+        autorizzati.extend(["WebSearch", "WebFetch"]);
+    }
+    if !autorizzati.is_empty() {
+        cmd.arg("--allowedTools").arg(autorizzati.join(","));
+    }
+    // Degli strumenti di Claude Code restano al massimo Read (cartelle degli allegati) e la ricerca web
+    let mut integrati: Vec<&str> = vec![];
+    if !c.cartelle_lettura.is_empty() {
+        integrati.push("Read");
         for d in c.cartelle_lettura {
             cmd.arg("--add-dir").arg(d);
         }
     }
+    if c.web {
+        integrati.extend(["WebSearch", "WebFetch"]);
+    }
+    cmd.args(["--tools", &integrati.join(",")]);
     let mut child = cmd.spawn().map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
             AppError::msg("Claude Code non trovato: installalo da claude.com/download o indica il percorso in Impostazioni → Provider")
@@ -247,7 +259,7 @@ mod tests {
                 testo.push_str(&t)
             }
         };
-        let c = super::Chiamata { bin: &bin, cwd: &cwd, system: "Rispondi in una riga.", prompt: "Il mio colore preferito è il blu oltremare. Rispondi solo: ok", modello: "haiku", effort: "", sessione: None, cartelle_lettura: &[], mcp_config: None, timeout_strumenti_s: 300 };
+        let c = super::Chiamata { bin: &bin, cwd: &cwd, system: "Rispondi in una riga.", prompt: "Il mio colore preferito è il blu oltremare. Rispondi solo: ok", modello: "haiku", effort: "", sessione: None, cartelle_lettura: &[], web: false, mcp_config: None, timeout_strumenti_s: 300 };
         let (r, sessione) = super::stream(c, &mut on, &cancel).await.unwrap();
         assert!(!testo.is_empty(), "nessun testo in streaming");
         assert!(r.raw["session_id"].is_string());
@@ -257,7 +269,7 @@ mod tests {
                 secondo.push_str(&t)
             }
         };
-        let c = super::Chiamata { bin: &bin, cwd: &cwd, system: "Rispondi in una riga.", prompt: "Qual è il mio colore preferito?", modello: "haiku", effort: "", sessione: sessione.as_deref(), cartelle_lettura: &[], mcp_config: None, timeout_strumenti_s: 300 };
+        let c = super::Chiamata { bin: &bin, cwd: &cwd, system: "Rispondi in una riga.", prompt: "Qual è il mio colore preferito?", modello: "haiku", effort: "", sessione: sessione.as_deref(), cartelle_lettura: &[], web: false, mcp_config: None, timeout_strumenti_s: 300 };
         super::stream(c, &mut on2, &cancel).await.unwrap();
         assert!(secondo.to_lowercase().contains("blu"), "la sessione non è stata ripresa: {secondo}");
     }

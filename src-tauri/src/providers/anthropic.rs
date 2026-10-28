@@ -223,6 +223,15 @@ impl Stato {
                         on(Delta::Pensiero(t.to_string()));
                     }
                     "signature_delta" => append(b, "signature", d["signature"].as_str().unwrap_or_default()),
+                    // Le citazioni vanno conservate così come arrivano (si rimandano nei turni successivi)
+                    "citations_delta" => {
+                        if !b["citations"].is_array() {
+                            b["citations"] = json!([]);
+                        }
+                        if let Some(a) = b["citations"].as_array_mut() {
+                            a.push(d["citation"].clone());
+                        }
+                    }
                     "input_json_delta" => self.json_parziale[i].push_str(d["partial_json"].as_str().unwrap_or_default()),
                     _ => {}
                 }
@@ -237,6 +246,13 @@ impl Stato {
                             b["input"] = serde_json::from_str(raw).unwrap_or_else(|_| json!({ "__json_non_valido": raw }));
                         }
                     }
+                    if b["type"] == "server_tool_use" {
+                        match b["name"].as_str() {
+                            Some("web_search") => on(Delta::Nota(format!("Cerco sul web: {}", b["input"]["query"].as_str().unwrap_or_default()))),
+                            Some("web_fetch") => on(Delta::Nota(format!("Leggo {}", b["input"]["url"].as_str().unwrap_or_default()))),
+                            _ => {}
+                        }
+                    }
                 }
             }
             "message_delta" => {
@@ -248,6 +264,9 @@ impl Stato {
                 }
                 if let Some(o) = ev["usage"]["output_tokens"].as_u64() {
                     self.usage.output_tokens = o;
+                }
+                if let Some(w) = ev["usage"]["server_tool_use"]["web_search_requests"].as_u64() {
+                    self.usage.web_search = w;
                 }
             }
             "message_stop" => return Ok(true),

@@ -38,6 +38,8 @@ pub fn stima(model: &str, u: &Usage) -> Option<f64> {
     Some(
         u.input_tokens as f64 * p.input / mtok
             + u.output_tokens as f64 * p.output / mtok
+            // Ricerche web: 10 $ ogni 1000
+            + u.web_search as f64 * 0.01
             + u.cache_read as f64 * p.cache_read / mtok
             // La scrittura in cache costa il 25% in più dell'input
             + u.cache_write as f64 * p.input * 1.25 / mtok,
@@ -48,7 +50,7 @@ pub fn stima(model: &str, u: &Usage) -> Option<f64> {
 mod tests {
     #[test]
     fn opus_5_5_price() {
-        let u = crate::providers::Usage { input_tokens: 1_000_000, output_tokens: 1_000_000, cache_read: 0, cache_write: 0 };
+        let u = crate::providers::Usage { input_tokens: 1_000_000, output_tokens: 1_000_000, cache_read: 0, cache_write: 0, web_search: 0 };
         assert!((super::stima("claude-opus-5-5", &u).unwrap() - 24.0).abs() < 1e-9);
         assert!(super::stima("gpt-5", &u).is_none());
     }

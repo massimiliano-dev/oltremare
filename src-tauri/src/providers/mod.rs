@@ -15,6 +15,8 @@ use tokio_util::sync::CancellationToken;
 pub enum Delta {
     Testo(String),
     Pensiero(String),
+    /// Avviso di avanzamento (es. «Cerco sul web: …»)
+    Nota(String),
 }
 
 pub struct Richiesta<'a> {
@@ -46,6 +48,9 @@ pub struct Usage {
     pub output_tokens: u64,
     pub cache_read: u64,
     pub cache_write: u64,
+    /// Ricerche web lato server (Claude), pagate a parte
+    #[serde(default)]
+    pub web_search: u64,
 }
 
 impl Usage {
@@ -54,6 +59,7 @@ impl Usage {
         self.output_tokens += o.output_tokens;
         self.cache_read += o.cache_read;
         self.cache_write += o.cache_write;
+        self.web_search += o.web_search;
     }
 }
 

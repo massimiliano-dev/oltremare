@@ -136,6 +136,16 @@ impl Sessione {
     }
 }
 
+/// Titolo e testo visibile di una pagina, letti con il browser degli agenti (senza finestre).
+pub async fn testo_di(url: &str, profilo: &Path) -> Result<(String, String), String> {
+    let p = sessione().pagina(profilo).await?;
+    p.goto(url).await.map_err(|e| e.to_string())?;
+    let _ = p.wait_for_navigation().await;
+    tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+    let v = js(&p, "({ t: document.title, x: document.body ? document.body.innerText : '' })").await?;
+    Ok((v["t"].as_str().unwrap_or_default().to_string(), v["x"].as_str().unwrap_or_default().to_string()))
+}
+
 async fn js(p: &Page, codice: &str) -> Result<Value, String> {
     // Uno script che non restituisce nulla (undefined) vale null
     Ok(p.evaluate(codice).await.map_err(|e| format!("Errore nella pagina: {e}"))?.value().cloned().unwrap_or(Value::Null))

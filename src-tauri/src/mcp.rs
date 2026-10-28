@@ -92,7 +92,8 @@ async fn messaggio(ctx: &ContestoRun, m: Value) -> Option<Value> {
             "instructions": "Strumenti per agire sul computer dell'utente. Le azioni che modificano qualcosa possono richiedere la sua approvazione.",
         })),
         "ping" => Ok(json!({})),
-        "tools/list" => Ok(json!({ "tools": tools::per_mcp(&ctx.strumenti()) })),
+        // Con Claude Code la ricerca web è la sua (WebSearch, WebFetch): gli strumenti web di Oltremare non servono
+        "tools/list" => Ok(json!({ "tools": tools::per_mcp(&ctx.strumenti().into_iter().filter(|t| t.categoria != "web").collect::<Vec<_>>()) })),
         "tools/call" => {
             let nome = p["name"].as_str().unwrap_or_default().to_string();
             let args = if p["arguments"].is_object() { p["arguments"].clone() } else { json!({}) };

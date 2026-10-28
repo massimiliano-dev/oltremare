@@ -52,6 +52,10 @@ Se non c'è nessuna chiave API ma Claude Code è collegato, gli agenti passano d
   - si ferma se muovi il mouse;
   - non tocca le app di password e banca.
 - **Browser**: Chrome o Edge con un profilo separato dal tuo, di norma invisibile: nessuna finestra sul tuo schermo, le pagine si vedono negli screenshot dei passaggi. In Impostazioni → Generale si può mostrare. Lavora su riferimenti agli elementi della pagina e non compila mai i campi password. Si può limitare a certi siti.
+- **Ricerca web automatica**: se un agente non sa qualcosa con certezza, o l'informazione può essere cambiata, cerca prima di rispondere e cita le fonti.
+  - **Claude con chiave API**: la ricerca e la lettura di pagine di Anthropic, con citazioni. La ricerca costa 10 $ ogni 1000, la lettura solo i token.
+  - **Abbonamento**: gli strumenti di ricerca di Claude Code.
+  - **GPT e AI locale**: «Cercare sul web» con DuckDuckGo, gratis e senza chiave, e «Leggere pagine web», che usa il browser degli agenti per le pagine costruite con JavaScript.
 - **Contenuti**:
   - **PDF** da Markdown o HTML, impaginati con il Chrome già usato dagli agenti, senza programmi in più.
   - **Presentazioni** 16:9 in PDF, PowerPoint modificabile o HTML, con [Marp CLI](https://github.com/marp-team/marp-cli) (`npm i -g @marp-team/marp-cli`). Senza Marp si fanno comunque PDF e HTML.
