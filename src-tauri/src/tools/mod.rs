@@ -8,6 +8,7 @@ pub mod computer;
 pub mod fs;
 pub mod percorsi;
 pub mod posta;
+pub mod processi;
 pub mod shell;
 pub mod sviluppo;
 
@@ -219,6 +220,40 @@ Scrivi una richiesta completa: obiettivo, vincoli, come verificare. Per continua
         nome: "apri_in_editor", etichetta: "Aprire nell'editor", categoria: "dev", rischio: Rischio::Read, parallelo: false, input_grande: false,
         descrizione: "Apre una cartella di progetto o un file (anche a una riga precisa) nell'editor di codice dell'utente.",
         schema: || obj(&[("percorso", s(P)), ("riga", i("Riga a cui posizionarsi (facoltativa)"))], &["percorso"]),
+    },
+    ToolSpec {
+        nome: "editor_claude_scrivi", etichetta: "Scrivere a Claude nell'editor", categoria: "dev", rischio: Rischio::Write, parallelo: false, input_grande: true,
+        descrizione: "Lavora come l'utente: porta in primo piano il progetto nell'editor, scrive il messaggio nel pannello di Claude Code e preme Invio. \
+Continua l'ultima conversazione del progetto (o quella indicata), oppure ne apre una nuova. Claude nel pannello legge il codice, lo modifica, esegue comandi e usa i server MCP \
+configurati in Claude Code. Poi segui il lavoro con editor_claude_stato. Scrivi come scriverebbe l'utente: obiettivo, vincoli, come verificare.",
+        schema: || obj(&[("cartella", s("Cartella del progetto")), ("messaggio", s("Cosa scrivere a Claude (massimo 6000 caratteri)")), ("sessione", s("Conversazione da continuare (facoltativa: predefinita l'ultima del progetto)")), ("nuova_conversazione", b("Apri una conversazione nuova invece di continuare l'ultima"))], &["cartella", "messaggio"]),
+    },
+    ToolSpec {
+        nome: "editor_claude_stato", etichetta: "Seguire Claude nell'editor", categoria: "dev", rischio: Rischio::Read, parallelo: false, input_grande: false,
+        descrizione: "Cosa sta facendo Claude nel pannello dell'editor per questo progetto: azioni recenti, ultima risposta, se ha finito, se fa una domanda o se è fermo (di solito su una richiesta di permesso, da guardare sullo schermo). \
+Con attendi_secondi aspetta finché Claude finisce o si ferma, senza consumare passi.",
+        schema: || obj(&[("cartella", s("Cartella del progetto")), ("attendi_secondi", i("Quanto aspettare al massimo che finisca (0 = subito, fino a 1200)")), ("sessione", s("Conversazione (facoltativa: l'ultima del progetto)"))], &["cartella"]),
+    },
+    ToolSpec {
+        nome: "avvia_processo", etichetta: "Avviare un processo in background", categoria: "dev", rischio: Rischio::Danger, parallelo: false, input_grande: false,
+        descrizione: "Avvia un comando che deve restare acceso (backend, server di sviluppo, watcher) nella cartella del progetto, come nel Terminale. \
+Aspetta qualche secondo e restituisce le prime righe e gli indirizzi locali aperti (es. http://localhost:5173). Con lo stesso nome lo riavvia.",
+        schema: || obj(&[("comando", s("Il comando, es. npm run dev")), ("cartella", s("Cartella del progetto")), ("nome", s("Nome breve, es. backend o frontend")), ("attendi_secondi", i("Quanto aspettare l'avvio (predefinito 15)"))], &["comando", "cartella"]),
+    },
+    ToolSpec {
+        nome: "processi", etichetta: "Elencare i processi in background", categoria: "dev", rischio: Rischio::Read, parallelo: true, input_grande: false,
+        descrizione: "I processi avviati in background, con stato, cartella e indirizzi.",
+        schema: || obj(&[], &[]),
+    },
+    ToolSpec {
+        nome: "log_processo", etichetta: "Leggere i log di un processo", categoria: "dev", rischio: Rischio::Read, parallelo: true, input_grande: false,
+        descrizione: "Le ultime righe di output di un processo in background (per id o nome), anche filtrate.",
+        schema: || obj(&[("id", s("Id o nome del processo")), ("righe", i("Quante righe (predefinito 80)")), ("filtro", s("Solo le righe che contengono questo testo"))], &["id"]),
+    },
+    ToolSpec {
+        nome: "ferma_processo", etichetta: "Fermare un processo", categoria: "dev", rischio: Rischio::Write, parallelo: false, input_grande: false,
+        descrizione: "Ferma un processo in background (per id o nome) e quelli che ha avviato.",
+        schema: || obj(&[("id", s("Id o nome del processo"))], &["id"]),
     },
     ToolSpec {
         nome: "notifiche_recenti", etichetta: "Leggere le notifiche", categoria: "notifications", rischio: Rischio::Read, parallelo: true, input_grande: false,
@@ -517,6 +552,12 @@ pub fn titolo(nome: &str, input: &Value) -> String {
         "notifiche_recenti" => "Legge le notifiche".into(),
         "sviluppa" => format!("Sviluppa in {}: {}", breve(a("cartella")), a("richiesta").chars().take(80).collect::<String>()),
         "apri_in_editor" => format!("Apre {} nell'editor", breve(a("percorso"))),
+        "editor_claude_scrivi" => format!("Scrive a Claude in {}: {}", breve(a("cartella")), a("messaggio").chars().take(70).collect::<String>()),
+        "editor_claude_stato" => format!("Guarda il lavoro di Claude in {}", breve(a("cartella"))),
+        "avvia_processo" => format!("Avvia {} in {}", if a("nome").is_empty() { a("comando") } else { a("nome") }, breve(a("cartella"))),
+        "processi" => "Controlla i processi in background".into(),
+        "log_processo" => format!("Legge i log di {}", a("id")),
+        "ferma_processo" => format!("Ferma {}", a("id")),
         "notifiche_cerca" => format!("Cerca «{}» nelle notifiche", a("testo")),
         "notifiche_segna_lette" => "Segna le notifiche come lette".into(),
         "mail_cerca" => if a("testo").is_empty() { "Guarda la posta".into() } else { format!("Cerca «{}» nella posta", a("testo")) },
@@ -574,6 +615,8 @@ pub fn anteprima(nome: &str, input: &Value, radici: &[PathBuf]) -> (String, Opti
         "mail_rispondi" => (format!("Risposta{}:\n\n{}", if input["tutti"].as_bool().unwrap_or(false) { " a tutti" } else { "" }, a("testo")), None),
         "calendario_crea" => (format!("{} · {}{}{}", a("titolo"), a("inizio"), if a("luogo").is_empty() { String::new() } else { format!(" · {}", a("luogo")) }, if a("invitati").is_empty() { String::new() } else { format!("\nInvitati: {}", a("invitati")) }), None),
         "sviluppa" => (format!("Cartella: {}\n\n{}", a("cartella"), a("richiesta")), None),
+        "editor_claude_scrivi" => (format!("Progetto: {}\n\n{}", a("cartella"), a("messaggio")), None),
+        "avvia_processo" => (format!("$ {}\n(in {})", a("comando"), a("cartella")), None),
         _ if crate::mcp_client::spec(nome).is_some() => (format!("{}\n\n{}", titolo(nome, input), serde_json::to_string_pretty(input).unwrap_or_default().chars().take(1500).collect::<String>()), None),
         _ => (titolo(nome, input), None),
     }

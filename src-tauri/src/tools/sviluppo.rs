@@ -26,6 +26,7 @@ fn breve(input: &Value) -> String {
     let o = input.as_object();
     let v = o.and_then(|o| ["file_path", "path", "pattern", "command", "url", "description"].iter().find_map(|k| o.get(*k).and_then(Value::as_str)));
     v.map(|x| {
+        let x = x.lines().next().unwrap_or_default();
         let x = x.replace(&crate::shell_env::home().map(|h| h.to_string_lossy().into_owned()).unwrap_or_default(), "~");
         if x.chars().count() > 70 { format!("{}…", x.chars().take(70).collect::<String>()) } else { x }
     })
@@ -296,6 +297,299 @@ pub async fn esegui(nome: &str, input: &Value, radici: &[PathBuf], cancel: &Canc
     match nome {
         "sviluppa" => sviluppa(input, radici, cancel, app, run_id).await,
         "apri_in_editor" => apri_in_editor(input, radici, app).await,
+        "editor_claude_scrivi" => claude_scrivi(input, radici, app).await,
+        "editor_claude_stato" => claude_stato(input, radici, cancel, app, run_id).await,
+        "avvia_processo" | "processi" | "log_processo" | "ferma_processo" => super::processi::esegui(nome, input, radici).await,
         _ => Esito::errore(format!("Strumento sconosciuto: {nome}")),
+    }
+}
+
+// ---------- Claude nel pannello dell'editor: scrivere come l'utente, seguire il lavoro ----------
+
+fn codifica_url(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
+/// Cartella in cui Claude Code salva le conversazioni di un progetto (~/.claude/projects/<percorso con i trattini>).
+fn cartella_sessioni(progetto: &Path) -> Option<PathBuf> {
+    let base = crate::shell_env::home()?.join(".claude/projects");
+    let slug = |p: &Path| p.to_string_lossy().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect::<String>();
+    let mut candidati = vec![base.join(slug(progetto))];
+    if let Ok(c) = progetto.canonicalize() {
+        candidati.push(base.join(slug(&c)));
+    }
+    candidati.into_iter().find(|d| d.is_dir()).or_else(|| Some(base.join(slug(progetto))))
+}
+
+/// Conversazioni del progetto, la più recente prima.
+fn sessioni(progetto: &Path) -> Vec<(PathBuf, std::time::SystemTime)> {
+    let Some(dir) = cartella_sessioni(progetto) else { return vec![] };
+    let mut v: Vec<(PathBuf, std::time::SystemTime)> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "jsonl"))
+        .filter_map(|e| Some((e.path(), e.metadata().ok()?.modified().ok()?)))
+        .collect();
+    v.sort_by(|a, b| b.1.cmp(&a.1));
+    v
+}
+
+#[derive(Default)]
+struct StatoSessione {
+    id: String,
+    ultima_richiesta: String,
+    ultima_risposta: String,
+    azioni: Vec<String>,
+    in_sospeso: Vec<String>,
+    finito: bool,
+    fermo_da: u64,
+    inattivo_da: u64,
+    domanda: bool,
+}
+
+fn testo_contenuto(c: &Value) -> String {
+    match c {
+        Value::String(s) => s.clone(),
+        Value::Array(a) => a.iter().filter(|b| b["type"] == "text").filter_map(|b| b["text"].as_str()).collect::<Vec<_>>().join("\n"),
+        _ => String::new(),
+    }
+}
+
+fn leggi_sessione(file: &Path) -> StatoSessione {
+    let mut st = StatoSessione { id: file.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(), ..Default::default() };
+    let Ok(t) = std::fs::read_to_string(file) else { return st };
+    let mut sospesi: Vec<(String, String)> = vec![];
+    let mut ultimo_assistente_fine = false;
+    let mut ultimo_tipo = String::new();
+    for riga in t.lines() {
+        let Ok(v) = serde_json::from_str::<Value>(riga) else { continue };
+        match v["type"].as_str() {
+            Some("user") => {
+                let c = &v["message"]["content"];
+                if let Some(a) = c.as_array() {
+                    for b in a.iter().filter(|b| b["type"] == "tool_result") {
+                        let id = b["tool_use_id"].as_str().unwrap_or_default();
+                        sospesi.retain(|(x, _)| x != id);
+                    }
+                }
+                let testo = testo_contenuto(c);
+                if !testo.trim().is_empty() && !testo.starts_with("<") && v["isMeta"].as_bool() != Some(true) {
+                    st.ultima_richiesta = testo;
+                    st.ultima_risposta.clear();
+                    ultimo_assistente_fine = false;
+                }
+                ultimo_tipo = "user".into();
+            }
+            Some("assistant") => {
+                for b in v["message"]["content"].as_array().into_iter().flatten() {
+                    match b["type"].as_str() {
+                        Some("text") => st.ultima_risposta = b["text"].as_str().unwrap_or_default().to_string(),
+                        Some("tool_use") => {
+                            let nome = b["name"].as_str().unwrap_or("strumento").replace("mcp__", "").replace("__", " · ");
+                            let descr = format!("{nome} {}", breve(&b["input"])).trim().to_string();
+                            sospesi.push((b["id"].as_str().unwrap_or_default().to_string(), descr.clone()));
+                            st.azioni.push(descr);
+                        }
+                        _ => {}
+                    }
+                }
+                ultimo_assistente_fine = v["message"]["stop_reason"].as_str() == Some("end_turn");
+                ultimo_tipo = "assistant".into();
+            }
+            _ => {}
+        }
+    }
+    let inattivo = std::fs::metadata(file).and_then(|m| m.modified()).ok().and_then(|m| m.elapsed().ok()).map(|d| d.as_secs()).unwrap_or(0);
+    st.inattivo_da = inattivo;
+    st.in_sospeso = sospesi.into_iter().map(|(_, d)| d).collect();
+    st.finito = st.in_sospeso.is_empty() && ultimo_tipo == "assistant" && (ultimo_assistente_fine || inattivo >= 6);
+    if !st.in_sospeso.is_empty() {
+        st.fermo_da = inattivo;
+    }
+    st.domanda = st.finito && st.ultima_risposta.trim_end().ends_with('?');
+    st
+}
+
+fn descrivi(st: &StatoSessione) -> String {
+    let stato = if st.finito {
+        if st.domanda { "Claude ha finito e ti fa una domanda: rispondigli con «editor_claude_scrivi».".to_string() } else { "Claude ha finito il turno.".to_string() }
+    } else if !st.in_sospeso.is_empty() && st.fermo_da >= 20 {
+        format!(
+            "Claude è fermo da {} s su «{}»: probabilmente aspetta un permesso nel pannello. Guarda lo schermo (schermo_screenshot) e rispondi come farebbe l'utente (per esempio «Sì» o «Sì, e non chiedere più» per comandi di sviluppo innocui), oppure il comando è lungo.",
+            st.fermo_da,
+            st.in_sospeso.last().cloned().unwrap_or_default()
+        )
+    } else if !st.in_sospeso.is_empty() {
+        format!("Claude sta eseguendo «{}».", st.in_sospeso.last().cloned().unwrap_or_default())
+    } else {
+        "Claude sta lavorando.".to_string()
+    };
+    let azioni = st.azioni.iter().rev().take(12).rev().map(|a| format!("- {a}")).collect::<Vec<_>>().join("\n");
+    format!(
+        "Sessione {}\n{stato}\n\nUltima richiesta:\n{}\n\nAzioni recenti di Claude:\n{}\n\nUltima risposta di Claude:\n{}",
+        st.id,
+        st.ultima_richiesta.chars().take(600).collect::<String>(),
+        if azioni.is_empty() { "(nessuna)".into() } else { azioni },
+        if st.ultima_risposta.is_empty() { "(ancora nessuna)".into() } else { st.ultima_risposta.chars().take(4000).collect::<String>() }
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn premi_invio() -> Result<(), String> {
+    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+    if !crate::permessi::stato().accessibility {
+        return Err("serve il permesso Accessibilità per premere Invio".into());
+    }
+    let mut e = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
+    e.key(Key::Return, Direction::Click).map_err(|e| e.to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn premi_invio() -> Result<(), String> {
+    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+    let mut e = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
+    e.key(Key::Return, Direction::Click).map_err(|e| e.to_string())
+}
+
+async fn claude_scrivi(input: &Value, radici: &[PathBuf], app: &AppHandle) -> Esito {
+    let cartella = match percorsi::consentito(str_arg(input, "cartella"), radici) {
+        Ok(p) if p.is_dir() => p,
+        Ok(p) => return Esito::errore(format!("{} non è una cartella", p.display())),
+        Err(e) => return Esito::errore(e),
+    };
+    let messaggio = str_arg(input, "messaggio").trim().to_string();
+    if messaggio.is_empty() {
+        return Esito::errore("Il messaggio è vuoto");
+    }
+    if messaggio.chars().count() > 6000 {
+        return Esito::errore("Messaggio troppo lungo per il pannello (massimo 6000 caratteri): scrivi i dettagli in un file del progetto e chiedi a Claude di leggerlo.");
+    }
+    let s = app.state::<App>().store.settings();
+    let Some(cli) = riga_di_comando(&s.editor_app) else {
+        return Esito::errore("Nessun editor di codice trovato: sceglilo in Impostazioni → Strumenti esterni.");
+    };
+    let (nome_editor, schema) = info_editor(&cli);
+    let nuova = input["nuova_conversazione"].as_bool().unwrap_or(false);
+    let sessione = if nuova { None } else { Some(str_arg(input, "sessione").trim().to_string()).filter(|x| !x.is_empty()).or_else(|| sessioni(&cartella).first().and_then(|(p, _)| p.file_stem().map(|x| x.to_string_lossy().into_owned()))) };
+
+    // 1. Il progetto in primo piano nell'editor
+    mostra_cartella(&cli, &cartella).await;
+    // 2. Il pannello di Claude con il messaggio già scritto (come se l'utente l'avesse digitato)
+    let mut url = format!("{schema}://anthropic.claude-code/open?prompt={}", codifica_url(&messaggio));
+    if let Some(sid) = &sessione {
+        url.push_str(&format!("&session={sid}"));
+    }
+    let aperto = if cfg!(target_os = "macos") {
+        matches!(tokio::process::Command::new("open").arg(&url).status().await, Ok(st) if st.success())
+    } else {
+        editor_cmd(&cli, &["--open-url", &url]).await
+    };
+    if !aperto {
+        return Esito::errore(format!("Non riesco ad aprire il pannello di Claude in {nome_editor}"));
+    }
+    tokio::time::sleep(Duration::from_millis(2500)).await;
+    // 3. Invio, con l'editor davanti
+    #[cfg(target_os = "macos")]
+    if let Some(app_editor) = cli.ancestors().find(|a| a.extension().is_some_and(|x| x == "app")) {
+        let _ = tokio::process::Command::new("open").arg("-a").arg(app_editor).status().await;
+        tokio::time::sleep(Duration::from_millis(600)).await;
+    }
+    let t0 = std::time::SystemTime::now() - Duration::from_secs(2);
+    if let Err(e) = tokio::task::spawn_blocking(premi_invio).await.unwrap_or_else(|e| Err(e.to_string())) {
+        return Esito::errore(format!("Il messaggio è scritto nel pannello di Claude in {nome_editor}, ma non posso inviarlo: {e}. Chiedi all'utente di premere Invio."));
+    }
+    // 4. Si controlla che Claude l'abbia ricevuto (la conversazione su disco)
+    // L'inizio del messaggio così come compare nel file della conversazione (JSON)
+    let prima_riga: String = messaggio.lines().next().unwrap_or_default().chars().take(40).collect();
+    let inizio_msg = serde_json::to_string(&prima_riga).unwrap_or_default().trim_matches('"').to_string();
+    let mut trovata: Option<String> = None;
+    for _ in 0..20 {
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        for (p, m) in sessioni(&cartella).into_iter().take(5) {
+            if m < t0 {
+                continue;
+            }
+            if std::fs::read_to_string(&p).is_ok_and(|t| t.lines().rev().take(60).any(|l| l.contains("\"type\":\"user\"") && l.contains(&inizio_msg))) {
+                trovata = p.file_stem().map(|x| x.to_string_lossy().into_owned());
+                break;
+            }
+        }
+        if trovata.is_some() {
+            break;
+        }
+    }
+    match trovata {
+        Some(sid) => {
+            let t = format!("Messaggio inviato a Claude nel pannello di {nome_editor} (sessione {sid}). Claude sta lavorando: segui con «editor_claude_stato» (con attendi_secondi per aspettare la fine).");
+            Esito::ok(t.clone(), json!({ "kind": "text", "text": t }))
+        }
+        None => Esito::errore(format!(
+            "Ho scritto il messaggio nel pannello di Claude in {nome_editor} e premuto Invio, ma non risulta arrivato. Guarda lo schermo (schermo_screenshot): forse il pannello chiede qualcosa (accesso, fiducia nella cartella) o il cursore non era nel campo del messaggio. Clicca nel campo e premi Invio, o rispondi alla richiesta."
+        )),
+    }
+}
+
+async fn claude_stato(input: &Value, radici: &[PathBuf], cancel: &CancellationToken, app: &AppHandle, run_id: &str) -> Esito {
+    let cartella = match percorsi::consentito(str_arg(input, "cartella"), radici) {
+        Ok(p) => p,
+        Err(e) => return Esito::errore(e),
+    };
+    let scelta = str_arg(input, "sessione").trim().to_string();
+    let file = || -> Option<PathBuf> {
+        let l = sessioni(&cartella);
+        if scelta.is_empty() { l.first().map(|(p, _)| p.clone()) } else { l.into_iter().map(|(p, _)| p).find(|p| p.file_stem().is_some_and(|s| s.to_string_lossy() == scelta)) }
+    };
+    let Some(mut f) = file() else {
+        return Esito::errore("Nessuna conversazione di Claude per questo progetto: inizia con «editor_claude_scrivi».");
+    };
+    let attesa = input["attendi_secondi"].as_u64().unwrap_or(0).min(1200);
+    let inizio = std::time::Instant::now();
+    let mut st = leggi_sessione(&f);
+    let mut ultima_azione = st.azioni.len();
+    while attesa > 0 && inizio.elapsed() < Duration::from_secs(attesa) && !st.finito && !(st.fermo_da >= 25) {
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(3)) => {}
+            _ = cancel.cancelled() => return Esito::errore("Interrotto"),
+        }
+        if let Some(n) = file() {
+            f = n;
+        }
+        st = leggi_sessione(&f);
+        if st.azioni.len() != ultima_azione {
+            ultima_azione = st.azioni.len();
+            if let Some(a) = st.azioni.last() {
+                let _ = app.emit("run-progress", json!({ "runId": run_id, "text": format!("Claude nell'editor · {a}") }));
+            }
+        }
+    }
+    let t = descrivi(&st);
+    let errore = !st.finito && st.fermo_da >= 25;
+    let vista = json!({ "kind": "text", "text": t.chars().take(5000).collect::<String>() });
+    if errore {
+        let mut e = Esito::errore(t);
+        e.risultato = vista;
+        e
+    } else {
+        Esito::ok(t, vista)
+    }
+}
+
+#[cfg(test)]
+mod prova_sessioni {
+    #[test]
+    #[ignore]
+    fn legge_l_ultima_sessione_reale() {
+        let p = std::path::PathBuf::from(std::env::var("PROGETTO").unwrap_or_else(|_| ".".into()));
+        let l = super::sessioni(&p);
+        assert!(!l.is_empty(), "nessuna sessione per {}", p.display());
+        let st = super::leggi_sessione(&l[0].0);
+        println!("{}", super::descrivi(&st).chars().take(1500).collect::<String>());
+        println!("finito={} sospesi={:?} inattivo={}", st.finito, st.in_sospeso, st.inattivo_da);
     }
 }

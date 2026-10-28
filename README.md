@@ -98,12 +98,19 @@ Microsoft 365 e Outlook.com tramite Microsoft Graph, Gmail e Google tramite le l
 
 ### Sviluppo e strumenti esterni (MCP)
 - **Server MCP**: in **Impostazioni → Strumenti esterni** colleghi server MCP via HTTP o come programmi locali. I loro strumenti diventano strumenti degli agenti, con le stesse regole di approvazione. Le istruzioni del server arrivano all'agente che li usa. «**Importa da Claude Code**» copia i server già configurati lì, con lo stesso metodo di autenticazione (`headersHelper`). Le intestazioni fisse e le variabili d'ambiente finiscono nel portachiavi.
-- **Sviluppa**: affida il lavoro sul codice a Claude Code nella cartella del progetto, con il tuo abbonamento.
-  - Usa il CLAUDE.md del progetto e i server MCP di Claude Code, per esempio il gestionale delle issue.
-  - Modifica file, lancia build e test e fa commit. Non fa push né pubblica.
-  - Restituisce un riepilogo, lo stato git e una sessione per continuare lo stesso lavoro.
-- **Apri nell'editor**: apre progetti e file in VS Code o in un'app derivata; di default sceglie quella usata più di recente.
-- L'agente **Sviluppatore** unisce queste tre cose. Trova la cartella e usa il gestionale delle issue secondo le sue istruzioni. Poi affida le modifiche a Claude Code, apre il risultato nell'editor e riassume.
+- **Claude nell'editor**:
+  - «Scrivi a Claude nell'editor» porta in primo piano il progetto in VS Code (o in un'app derivata), scrive il messaggio nel pannello di Claude Code e preme Invio, come faresti tu.
+  - «Segui Claude» legge la conversazione salvata da Claude Code e dice cosa sta facendo, se ha finito, se fa una domanda o se è fermo su una richiesta di permesso. Con un'attesa, aspetta la fine senza consumare passi.
+  - I permessi nel pannello si danno guardando lo schermo e cliccando, con le stesse regole che useresti tu.
+- **Processi in background**: backend, frontend e watcher restano accesi mentre l'agente lavora. L'agente ne legge i log e gli indirizzi locali e li ferma alla fine; si chiudono comunque con l'app.
+- **Prove nel browser**: l'agente apre l'app sull'indirizzo locale, clicca, compila e controlla che la funzione richiesta funzioni.
+- **Sviluppa in background** (facoltativo): affida un lavoro a Claude Code senza editor e restituisce riepilogo, stato git e sessione. Lo Sviluppatore non lo usa.
+- L'agente **Sviluppatore** lavora come te:
+  1. capisce il progetto e usa il gestionale delle issue secondo le sue istruzioni;
+  2. scrive a Claude nell'editor e lo segue, rispondendo ai permessi;
+  3. avvia backend e frontend e prova nel browser;
+  4. riporta a Claude gli errori finché tutto funziona;
+  5. riassume il lavoro, senza push.
 
 ### Finestre e interfaccia
 - **Icona nella barra dei menu** (area di notifica su Windows): segue lo stato dell'avatar e mostra un segno quando serve la tua attenzione. Dal menu: palette, briefing, compagno, ascolto, ferma tutto, avvio automatico, esci. Chiudere la finestra non spegne Oltremare.

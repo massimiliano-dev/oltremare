@@ -165,7 +165,7 @@ fn which_pwsh() -> bool {
 }
 
 /// Ferma il comando e tutti i processi che ha avviato.
-async fn uccidi(child: &mut tokio::process::Child, pid: Option<u32>) {
+pub(crate) async fn uccidi(child: &mut tokio::process::Child, pid: Option<u32>) {
     #[cfg(unix)]
     if let Some(pid) = pid {
         // Il comando è capo del proprio gruppo: si ferma tutto il gruppo

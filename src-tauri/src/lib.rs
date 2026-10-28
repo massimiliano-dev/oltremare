@@ -952,6 +952,7 @@ pub fn run() {
                 // Niente processi orfani: il motore locale si chiude con l'app
                 if let Some(st) = app.try_state::<App>() {
                     st.sidecar.ferma_subito();
+                    tools::processi::ferma_tutti();
                     st.runs.annulla_tutte();
                 }
             }

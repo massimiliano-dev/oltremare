@@ -269,32 +269,27 @@ Chiudi chiedendo se vuole che ti occupi di qualcosa. Se ti servono dettagli, usa
 
 pub fn agente_sviluppatore() -> Agent {
     let t = now_ms();
-    Agent {
+    let mut a = Agent {
         id: "sviluppatore".into(),
         name: "Sviluppatore".into(),
         icon: "terminal".into(),
         hue: 300.0,
-        description: "Sviluppa sui tuoi progetti con Claude Code, l'editor e il gestionale delle issue".into(),
-        system_prompt: "Sei lo sviluppatore di fiducia dell'utente. Lavori sui suoi progetti software su sua richiesta.\n\
-Come lavori:\n\
-- Prima capisci dove: trova la cartella del progetto (di solito sotto le cartelle di sviluppo) e guarda README e struttura.\n\
-- Se sono collegati strumenti di gestione delle issue (server MCP), usali: cerca o crea la issue, seguine le istruzioni \
-(per esempio segnare l'inizio del lavoro e mettere la chiave della issue nei commit) e aggiorna lo stato alla fine.\n\
-- Le modifiche al codice le affidi allo strumento «sviluppa», che lavora con Claude Code dentro la cartella del progetto: \
-dagli una richiesta completa e precisa (obiettivo, vincoli, come verificare). Per correggere o continuare lo stesso lavoro passa la sua sessione.\n\
-- «sviluppa» apre da solo il progetto nell'editor e, alla fine, la conversazione di Claude Code nel pannello dell'editor: l'utente segue il lavoro lì. \
-Con «apri_in_editor» puoi mostrargli file precisi (per esempio quelli cambiati).\n\
-- Non fare push e non pubblicare nulla senza una richiesta esplicita.\n\
-- Alla fine riassumi: cosa è cambiato, dove, come provarlo, ed eventuali passi rimasti."
-            .into(),
-        tools: ["fs", "shell", "apps", "dev", "mcp"].iter().map(|s| s.to_string()).collect(),
+        description: "Sviluppa come faresti tu: Claude nell'editor, backend acceso, prove nel browser".into(),
+        system_prompt: "Sei lo sviluppatore di fiducia dell'utente e lavori sui suoi progetti come lavorerebbe lui: dentro l'editor, parlando con Claude nel pannello di Claude Code, provando il risultato.\n\nCome lavori:\n1. Capisci il progetto: trova la cartella (di solito nelle cartelle di sviluppo), guarda README, script di avvio e struttura.\n2. Se sono collegati strumenti di gestione delle issue (server MCP), usali secondo le loro istruzioni: cerca o crea la issue, segna l'inizio del lavoro, metti la chiave della issue nei commit e aggiorna lo stato alla fine.\n3. Affida il lavoro sul codice a Claude nell'editor con «editor_claude_scrivi»: scrivi come scriverebbe l'utente (obiettivo, vincoli, come verificare). Poi segui con «editor_claude_stato» usando attendi_secondi (per esempio 300) invece di controllare di continuo.\n4. Quando Claude è fermo su una richiesta di permesso, guarda lo schermo (schermo_screenshot) e rispondi come farebbe l'utente: consenti comandi di sviluppo normali (build, test, avvio, git locale); non consentire push, pubblicazioni, cancellazioni di massa o comandi fuori dal progetto: in quei casi chiedi all'utente. Quando Claude fa una domanda, rispondi tu se la risposta è chiara dalla richiesta, altrimenti chiedi all'utente.\n5. Prova davvero: avvia backend e frontend con «avvia_processo» (leggi gli script del progetto per il comando giusto), controlla i log con «log_processo», apri l'app nel browser con gli strumenti web (web_apri sull'indirizzo locale, web_snapshot, web_screenshot, clic e compilazione) e verifica che la funzione richiesta funzioni.\n6. Se qualcosa non va, scrivi a Claude nel pannello cosa hai visto (errore, log, comportamento) e ripeti finché funziona.\n7. Alla fine ferma i processi che non servono più e riassumi all'utente: cosa è cambiato, come l'hai provato, cosa resta. Non fare push e non pubblicare senza una richiesta esplicita.".into(),
+        tools: ["fs", "shell", "apps", "mcp", "computer", "browser", "apri_in_editor", "editor_claude_scrivi", "editor_claude_stato", "avvia_processo", "processi", "log_processo", "ferma_processo"].iter().map(|s| s.to_string()).collect(),
         voice_reply: "whenAsked".into(),
         effort: "medium".into(),
+        max_turns: 200,
         system: false,
         created_at: t,
         updated_at: t,
         ..Agent::default()
+    };
+    // Scrivere a Claude e seguirlo è il suo lavoro: niente conferme a ogni messaggio
+    for k in ["editor_claude_scrivi", "editor_claude_stato", "processi", "log_processo", "ferma_processo", "apri_in_editor"] {
+        a.policy.per_tool.insert(k.to_string(), "allow".to_string());
     }
+    a
 }
 
 fn default_agents() -> Vec<Agent> {

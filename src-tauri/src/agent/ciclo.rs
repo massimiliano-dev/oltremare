@@ -412,7 +412,8 @@ async fn esegui(
                 sessione: sessione.as_deref(),
                 cartelle_lettura: &cartelle,
                 mcp_config: mcp_config.as_deref(),
-                timeout_strumenti_s: agent.policy.approval_timeout_s as u64 + 120,
+                // Copre anche le attese lunghe (Claude nell'editor fino a 20 minuti)
+                timeout_strumenti_s: (agent.policy.approval_timeout_s as u64 + 120).max(1320),
             };
             providers::claude_code::stream(c, &mut on, &ctx.cancel).await
         };
