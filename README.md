@@ -27,6 +27,7 @@ Se non c'è nessuna chiave API ma Claude Code è collegato, gli agenti passano d
 
 ### Agenti
 - Nome, icona, colore, istruzioni, provider, modello e livello di impegno per ciascuno. `⌘⇧A` crea, `⌘E` modifica.
+- **Messaggi in coda**: mentre un agente lavora puoi continuare a scrivere. Invio mette il messaggio in coda, e i messaggi partono in ordine appena l'agente finisce. Ognuno si può togliere, riportare nel campo per modificarlo o inviare subito interrompendo il lavoro. Dopo «Ferma» o un errore la coda va in pausa.
 - Agenti già pronti:
   - **Assistente**: sempre presente, con file, comandi, app, posta, calendario, attività e notifiche.
   - **Briefing**: il briefing del mattino.
