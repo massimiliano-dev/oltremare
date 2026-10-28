@@ -74,6 +74,8 @@ pub struct Settings {
     pub mcp_servers: Vec<ServerMcp>,
     /// Editor per lo sviluppo (app in stile VS Code); vuoto = il più usato tra quelli installati
     pub editor_app: String,
+    /// Dove lavora lo Sviluppatore: "editor" (pannello di Claude nell'editor, con ripiego in Oltremare) o "oltremare"
+    pub dev_mode: String,
     /// Aspetto
     pub accent_hue: f64,
     pub accent_chroma: f64,
@@ -139,6 +141,7 @@ impl Default for Settings {
             briefing_days: vec![1, 2, 3, 4, 5],
             mcp_servers: vec![],
             editor_app: String::new(),
+            dev_mode: "editor".into(),
             accent_hue: 275.0,
             accent_chroma: 0.2,
             density: "comfortable".into(),

@@ -134,6 +134,9 @@ async fn avvia(input: &Value, radici: &[PathBuf]) -> Esito {
         });
     }
     let id = uuid::Uuid::new_v4().simple().to_string()[..8].to_string();
+    if let Some(app) = crate::APP.get() {
+        crate::dev::segnala_progetto(app, &cartella);
+    }
     PROCESSI.lock().unwrap_or_else(|e| e.into_inner()).insert(id.clone(), Processo { nome: nome.clone(), comando: comando.clone(), cartella: cartella.clone(), avvio: Instant::now(), pid, log: log.clone(), uscita: uscita.clone(), figlio });
 
     // Si aspetta che il processo si presenti: un indirizzo nei log, un'uscita, o al massimo il tempo dato
@@ -194,6 +197,24 @@ pub fn ferma_tutti() {
             let _ = f.start_kill();
         }
     }
+}
+
+/// Per la vista Sviluppo: processi con stato, indirizzi e ultime righe.
+pub fn vista() -> Vec<Value> {
+    let m = PROCESSI.lock().unwrap_or_else(|e| e.into_inner());
+    let mut v: Vec<(Instant, Value)> = m
+        .iter()
+        .map(|(id, p)| {
+            let u = *p.uscita.lock().unwrap_or_else(|e| e.into_inner());
+            (p.avvio, json!({
+                "id": id, "name": p.nome, "command": p.comando, "folder": p.cartella.to_string_lossy(),
+                "running": u.is_none(), "exitCode": u, "urls": indirizzi(&p.log.lock().unwrap_or_else(|e| e.into_inner())),
+                "log": coda(&p.log, 400),
+            }))
+        })
+        .collect();
+    v.sort_by(|a, b| a.0.cmp(&b.0));
+    v.into_iter().map(|(_, x)| x).collect()
 }
 
 fn elenco() -> Esito {

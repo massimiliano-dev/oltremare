@@ -3,6 +3,7 @@ mod allegati;
 mod avatar;
 mod briefing;
 mod db;
+mod dev;
 mod error;
 mod finestre;
 mod mcp;
@@ -292,6 +293,9 @@ pub(crate) fn ferma_tutto(app: &AppHandle) {
     st.voce.ferma_lettura();
     tools::computer::rilascia_tutto();
 }
+
+/// L'app, per i moduli che non ricevono l'AppHandle (es. i processi in background)
+pub static APP: std::sync::OnceLock<AppHandle> = std::sync::OnceLock::new();
 
 #[cfg(target_os = "macos")]
 pub(crate) const KILL_SWITCH: &str = "Command+Shift+Escape";
@@ -828,6 +832,7 @@ pub fn run() {
                 mcp_clienti: Default::default(),
                 download: Default::default(),
             });
+            let _ = APP.set(app.handle().clone());
             app.state::<App>().voce.init(app.handle());
             notifiche::avvia(app.handle().clone());
             triggers::avvia(app.handle().clone());
@@ -914,6 +919,16 @@ pub fn run() {
             browser_status,
             accounts_list,
             mcp_status,
+            dev::dev_projects,
+            dev::dev_open,
+            dev::dev_tree,
+            dev::dev_file,
+            dev::dev_git,
+            dev::dev_diff,
+            dev::dev_session,
+            dev::dev_processes,
+            dev::dev_send,
+            dev::dev_stop,
             mcp_reload,
             mcp_secret_set,
             mcp_secret_has,
@@ -953,6 +968,7 @@ pub fn run() {
                 if let Some(st) = app.try_state::<App>() {
                     st.sidecar.ferma_subito();
                     tools::processi::ferma_tutti();
+                    tools::sviluppo::ferma_tutti_headless();
                     st.runs.annulla_tutte();
                 }
             }

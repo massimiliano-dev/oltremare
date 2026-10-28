@@ -69,6 +69,35 @@ async fn editor_cmd(cli: &Path, args: &[&str]) -> bool {
     matches!(tokio::time::timeout(Duration::from_secs(20), c.status()).await, Ok(Ok(st)) if st.success())
 }
 
+/// Claude Code senza interfaccia, nella cartella del progetto, con le impostazioni e i server MCP dell'utente.
+fn comando_headless(bin: &Path, cartella: &Path, messaggio: &str, sessione: Option<&str>, s: &crate::store::Settings) -> tokio::process::Command {
+    let mut consentiti: Vec<String> = CONSENTITI.iter().map(|x| x.to_string()).collect();
+    // Gli strumenti dei server MCP noti (in Claude Code o collegati qui) sono consentiti
+    let mut server: Vec<String> = crate::mcp_client::nomi_claude_code();
+    server.extend(s.mcp_servers.iter().filter(|x| x.enabled).map(|x| x.name.clone()));
+    server.sort();
+    server.dedup();
+    consentiti.extend(server.iter().map(|n| format!("mcp__{n}")));
+    let mut cmd = crate::providers::claude_code::comando(bin);
+    cmd.current_dir(cartella)
+        .arg("-p")
+        .arg(messaggio)
+        .args(["--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits"])
+        .arg("--allowedTools")
+        .arg(consentiti.join(","))
+        .arg("--disallowedTools")
+        .arg(VIETATI.join(","))
+        .arg("--append-system-prompt")
+        .arg("Lavori su richiesta dell'utente tramite il suo assistente Oltremare, senza poter fare domande: decidi in modo ragionevole e dichiara le scelte. Non fare push. Alla fine scrivi un riepilogo breve: cosa hai cambiato, come verificarlo, cosa resta da fare.");
+    if !s.claude_code_model.is_empty() && s.claude_code_model != "default" {
+        cmd.args(["--model", &s.claude_code_model]);
+    }
+    if let Some(sid) = sessione {
+        cmd.args(["--resume", sid]);
+    }
+    cmd
+}
+
 async fn sviluppa(input: &Value, radici: &[PathBuf], cancel: &CancellationToken, app: &AppHandle, run_id: &str) -> Esito {
     let cartella = match percorsi::consentito(str_arg(input, "cartella"), radici) {
         Ok(p) if p.is_dir() => p,
@@ -80,32 +109,7 @@ async fn sviluppa(input: &Value, radici: &[PathBuf], cancel: &CancellationToken,
     let Some(bin) = crate::providers::claude_code::trova(&s.claude_code_path) else {
         return Esito::errore("Claude Code non è installato su questo computer: serve per sviluppare (claude.com/download).");
     };
-    let mut consentiti: Vec<String> = CONSENTITI.iter().map(|x| x.to_string()).collect();
-    // Gli strumenti dei server MCP noti (in Claude Code o collegati qui) sono consentiti
-    let mut server: Vec<String> = crate::mcp_client::nomi_claude_code();
-    server.extend(s.mcp_servers.iter().filter(|x| x.enabled).map(|x| x.name.clone()));
-    server.sort();
-    server.dedup();
-    consentiti.extend(server.iter().map(|n| format!("mcp__{n}")));
-
-    let mut cmd = crate::providers::claude_code::comando(&bin);
-    cmd.current_dir(&cartella)
-        .arg("-p")
-        .arg(str_arg(input, "richiesta"))
-        .args(["--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits"])
-        .arg("--allowedTools")
-        .arg(consentiti.join(","))
-        .arg("--disallowedTools")
-        .arg(VIETATI.join(","))
-        .arg("--append-system-prompt")
-        .arg("Lavori su richiesta dell'utente tramite il suo assistente Oltremare, senza poter fare domande: decidi in modo ragionevole e dichiara le scelte. Non fare push. Alla fine scrivi un riepilogo breve: cosa hai cambiato, come verificarlo, cosa resta da fare.");
-    if !s.claude_code_model.is_empty() && s.claude_code_model != "default" {
-        cmd.args(["--model", &s.claude_code_model]);
-    }
-    let sessione = str_arg(input, "sessione").trim();
-    if !sessione.is_empty() {
-        cmd.args(["--resume", sessione]);
-    }
+    let mut cmd = comando_headless(&bin, &cartella, str_arg(input, "richiesta"), Some(str_arg(input, "sessione").trim()).filter(|x| !x.is_empty()), &s);
     let mut figlio = match cmd.spawn() {
         Ok(f) => f,
         Err(e) => return Esito::errore(format!("Non riesco ad avviare Claude Code: {e}")),
@@ -297,7 +301,7 @@ pub async fn esegui(nome: &str, input: &Value, radici: &[PathBuf], cancel: &Canc
     match nome {
         "sviluppa" => sviluppa(input, radici, cancel, app, run_id).await,
         "apri_in_editor" => apri_in_editor(input, radici, app).await,
-        "editor_claude_scrivi" => claude_scrivi(input, radici, app).await,
+        "editor_claude_scrivi" => scrivi_a_claude(input, radici, app).await,
         "editor_claude_stato" => claude_stato(input, radici, cancel, app, run_id).await,
         "avvia_processo" | "processi" | "log_processo" | "ferma_processo" => super::processi::esegui(nome, input, radici).await,
         _ => Esito::errore(format!("Strumento sconosciuto: {nome}")),
@@ -550,7 +554,18 @@ async fn claude_stato(input: &Value, radici: &[PathBuf], cancel: &CancellationTo
     };
     let attesa = input["attendi_secondi"].as_u64().unwrap_or(0).min(1200);
     let inizio = std::time::Instant::now();
+    crate::dev::segnala_progetto(app, &cartella);
+    // In modalità sviluppo di Oltremare conta il processo: finché è vivo Claude sta lavorando
+    let correggi = |st: &mut StatoSessione| match headless_attivo(&cartella) {
+        Some(true) => {
+            st.finito = false;
+            st.fermo_da = 0;
+        }
+        Some(false) if st.in_sospeso.is_empty() => st.finito = true,
+        _ => {}
+    };
     let mut st = leggi_sessione(&f);
+    correggi(&mut st);
     let mut ultima_azione = st.azioni.len();
     while attesa > 0 && inizio.elapsed() < Duration::from_secs(attesa) && !st.finito && !(st.fermo_da >= 25) {
         tokio::select! {
@@ -561,6 +576,7 @@ async fn claude_stato(input: &Value, radici: &[PathBuf], cancel: &CancellationTo
             f = n;
         }
         st = leggi_sessione(&f);
+        correggi(&mut st);
         if st.azioni.len() != ultima_azione {
             ultima_azione = st.azioni.len();
             if let Some(a) = st.azioni.last() {
@@ -592,4 +608,223 @@ mod prova_sessioni {
         println!("{}", super::descrivi(&st).chars().take(1500).collect::<String>());
         println!("finito={} sospesi={:?} inattivo={}", st.finito, st.in_sospeso, st.inattivo_da);
     }
+}
+
+
+// ---------- Modalità sviluppo di Oltremare: Claude Code in background, seguito nella vista «Sviluppo» ----------
+
+struct Headless {
+    figlio: std::sync::Arc<tokio::sync::Mutex<tokio::process::Child>>,
+    pid: Option<u32>,
+    sessione: std::sync::Arc<std::sync::Mutex<String>>,
+    finito: std::sync::Arc<std::sync::Mutex<Option<(bool, String)>>>,
+}
+
+static HEADLESS: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<PathBuf, Headless>>> = std::sync::LazyLock::new(Default::default);
+
+/// Claude Code in background sta lavorando su questo progetto? (Some(true) in corso, Some(false) appena finito)
+fn headless_attivo(cartella: &Path) -> Option<bool> {
+    let m = HEADLESS.lock().unwrap_or_else(|e| e.into_inner());
+    m.get(cartella).map(|h| h.finito.lock().map(|f| f.is_none()).unwrap_or(false))
+}
+
+pub async fn ferma_headless(cartella: &Path) -> bool {
+    let h = HEADLESS.lock().unwrap_or_else(|e| e.into_inner()).remove(cartella);
+    match h {
+        Some(h) => {
+            let mut f = h.figlio.lock().await;
+            super::shell::uccidi(&mut f, h.pid).await;
+            true
+        }
+        None => false,
+    }
+}
+
+pub fn ferma_tutti_headless() {
+    for (_, h) in HEADLESS.lock().unwrap_or_else(|e| e.into_inner()).drain() {
+        #[cfg(unix)]
+        if let Some(pid) = h.pid {
+            unsafe {
+                libc::kill(-(pid as i32), libc::SIGKILL);
+            }
+        }
+        if let Ok(mut f) = h.figlio.try_lock() {
+            let _ = f.start_kill();
+        }
+    }
+}
+
+async fn avvia_headless(app: &AppHandle, cartella: &Path, messaggio: &str, sessione: Option<String>) -> Result<String, String> {
+    if headless_attivo(cartella) == Some(true) {
+        return Err("Claude sta già lavorando su questo progetto in Oltremare: aspetta che finisca (editor_claude_stato) o fermalo dalla vista Sviluppo.".into());
+    }
+    let s = app.state::<App>().store.settings();
+    let bin = crate::providers::claude_code::trova(&s.claude_code_path).ok_or("Claude Code non è installato su questo computer (claude.com/download)")?;
+    let mut cmd = comando_headless(&bin, cartella, messaggio, sessione.as_deref(), &s);
+    #[cfg(unix)]
+    cmd.process_group(0);
+    let mut figlio = cmd.spawn().map_err(|e| format!("Non riesco ad avviare Claude Code: {e}"))?;
+    let pid = figlio.id();
+    let stdout = figlio.stdout.take().ok_or("uscita non disponibile")?;
+    let sid = std::sync::Arc::new(std::sync::Mutex::new(sessione.clone().unwrap_or_default()));
+    let finito: std::sync::Arc<std::sync::Mutex<Option<(bool, String)>>> = Default::default();
+    let (tx, rx) = tokio::sync::oneshot::channel::<String>();
+    {
+        let (sid, finito, app) = (sid.clone(), finito.clone(), app.clone());
+        let cartella = cartella.to_path_buf();
+        tokio::spawn(async move {
+            let mut tx = Some(tx);
+            let mut righe = BufReader::new(stdout).lines();
+            while let Ok(Some(r)) = righe.next_line().await {
+                let Ok(v) = serde_json::from_str::<Value>(&r) else { continue };
+                if let Some(id) = v["session_id"].as_str().filter(|x| !x.is_empty()) {
+                    *sid.lock().unwrap_or_else(|e| e.into_inner()) = id.to_string();
+                    if let Some(t) = tx.take() {
+                        let _ = t.send(id.to_string());
+                    }
+                }
+                if v["type"] == "result" {
+                    *finito.lock().unwrap_or_else(|e| e.into_inner()) = Some((v["is_error"].as_bool() == Some(true), v["result"].as_str().unwrap_or_default().to_string()));
+                    let _ = app.emit("dev-session", json!({ "folder": cartella.to_string_lossy(), "done": true }));
+                }
+            }
+            let mut f = finito.lock().unwrap_or_else(|e| e.into_inner());
+            if f.is_none() {
+                *f = Some((true, "Claude Code si è chiuso senza risultato".into()));
+            }
+        });
+    }
+    HEADLESS.lock().unwrap_or_else(|e| e.into_inner()).insert(cartella.to_path_buf(), Headless { figlio: std::sync::Arc::new(tokio::sync::Mutex::new(figlio)), pid, sessione: sid, finito });
+    crate::dev::segnala_progetto(app, cartella);
+    // Si aspetta la sessione (arriva subito con l'avvio)
+    match tokio::time::timeout(Duration::from_secs(30), rx).await {
+        Ok(Ok(id)) => Ok(id),
+        _ => Ok(sessione.unwrap_or_default()),
+    }
+}
+
+/// Scrivere a Claude: nel pannello dell'editor (come l'utente) oppure, se non si può o se si sceglie, in Oltremare.
+pub async fn scrivi_a_claude(input: &Value, radici: &[PathBuf], app: &AppHandle) -> Esito {
+    let cartella = match percorsi::consentito(str_arg(input, "cartella"), radici) {
+        Ok(p) if p.is_dir() => p,
+        Ok(p) => return Esito::errore(format!("{} non è una cartella", p.display())),
+        Err(e) => return Esito::errore(e),
+    };
+    crate::dev::segnala_progetto(app, &cartella);
+    let s = app.state::<App>().store.settings();
+    let qui = input["qui"].as_bool().unwrap_or(false) || s.dev_mode == "oltremare";
+    let mut nota = String::new();
+    if !qui {
+        let e = claude_scrivi(input, radici, app).await;
+        if !e.is_error {
+            return e;
+        }
+        nota = format!("Nell'editor non è andata ({}). ", e.testo.chars().take(240).collect::<String>());
+    }
+    let messaggio = str_arg(input, "messaggio").trim().to_string();
+    if messaggio.is_empty() {
+        return Esito::errore("Il messaggio è vuoto");
+    }
+    let nuova = input["nuova_conversazione"].as_bool().unwrap_or(false);
+    let sessione = if nuova {
+        None
+    } else {
+        Some(str_arg(input, "sessione").trim().to_string()).filter(|x| !x.is_empty()).or_else(|| sessioni(&cartella).first().and_then(|(p, _)| p.file_stem().map(|x| x.to_string_lossy().into_owned())))
+    };
+    match avvia_headless(app, &cartella, &messaggio, sessione).await {
+        Ok(sid) => {
+            let t = format!(
+                "{nota}Claude lavora in Oltremare, modalità sviluppo (sessione {sid}): l'utente lo segue nella vista Sviluppo con file, differenze, processi e anteprima. Segui con «editor_claude_stato». In questa modalità Claude modifica i file e usa i comandi di sviluppo consentiti senza chiedere; push e pubblicazioni restano vietati."
+            );
+            Esito::ok(t.clone(), json!({ "kind": "text", "text": t }))
+        }
+        Err(e) => Esito::errore(format!("{nota}{e}")),
+    }
+}
+
+/// La conversazione per la vista: messaggi, azioni con il loro esito, stato.
+pub fn vista_sessione(cartella: &Path, scelta: Option<&str>) -> Value {
+    let elenco = sessioni(cartella);
+    // Se Claude lavora qui in background, si mostra la sua conversazione
+    let in_corso = HEADLESS.lock().unwrap_or_else(|e| e.into_inner()).get(cartella).map(|h| h.sessione.lock().map(|x| x.clone()).unwrap_or_default()).filter(|x| !x.is_empty());
+    let scelta = scelta.filter(|x| !x.is_empty()).map(str::to_string).or(in_corso);
+    let scelta = scelta.as_deref();
+    let file = match scelta.filter(|x| !x.is_empty()) {
+        Some(id) => elenco.iter().map(|(p, _)| p.clone()).find(|p| p.file_stem().is_some_and(|s| s.to_string_lossy() == id)),
+        None => elenco.first().map(|(p, _)| p.clone()),
+    };
+    let sessioni_vista: Vec<Value> = elenco
+        .iter()
+        .take(15)
+        .map(|(p, m)| {
+            let titolo = std::fs::read_to_string(p)
+                .ok()
+                .and_then(|t| t.lines().find_map(|l| serde_json::from_str::<Value>(l).ok().filter(|v| v["type"] == "user" && v["isMeta"].as_bool() != Some(true)).map(|v| testo_contenuto(&v["message"]["content"])).filter(|t| !t.trim().is_empty() && !t.starts_with('<'))))
+                .unwrap_or_default();
+            json!({
+                "id": p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(),
+                "title": titolo.chars().take(80).collect::<String>(),
+                "updatedAt": m.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0),
+            })
+        })
+        .collect();
+    let Some(file) = file else {
+        return json!({ "id": null, "items": [], "sessions": sessioni_vista, "running": headless_attivo(cartella) == Some(true) });
+    };
+    let mut items: Vec<Value> = vec![];
+    let mut indici: std::collections::HashMap<String, usize> = Default::default();
+    if let Ok(t) = std::fs::read_to_string(&file) {
+        for riga in t.lines() {
+            let Ok(v) = serde_json::from_str::<Value>(riga) else { continue };
+            let quando = v["timestamp"].as_str().unwrap_or_default().to_string();
+            match v["type"].as_str() {
+                Some("user") => {
+                    let c = &v["message"]["content"];
+                    if let Some(a) = c.as_array() {
+                        for b in a.iter().filter(|b| b["type"] == "tool_result") {
+                            if let Some(&i) = b["tool_use_id"].as_str().and_then(|id| indici.get(id)) {
+                                let r = match &b["content"] {
+                                    Value::String(s) => s.clone(),
+                                    Value::Array(x) => x.iter().filter_map(|y| y["text"].as_str()).collect::<Vec<_>>().join("\n"),
+                                    _ => String::new(),
+                                };
+                                items[i]["result"] = json!(r.chars().take(3000).collect::<String>());
+                                items[i]["error"] = json!(b["is_error"].as_bool() == Some(true));
+                                items[i]["done"] = json!(true);
+                            }
+                        }
+                    }
+                    let testo = testo_contenuto(c);
+                    if !testo.trim().is_empty() && !testo.starts_with('<') && v["isMeta"].as_bool() != Some(true) {
+                        items.push(json!({ "kind": "user", "text": testo, "at": quando }));
+                    }
+                }
+                Some("assistant") => {
+                    for b in v["message"]["content"].as_array().into_iter().flatten() {
+                        match b["type"].as_str() {
+                            Some("text") if !b["text"].as_str().unwrap_or_default().trim().is_empty() => items.push(json!({ "kind": "text", "text": b["text"], "at": quando })),
+                            Some("tool_use") => {
+                                indici.insert(b["id"].as_str().unwrap_or_default().to_string(), items.len());
+                                let nome = b["name"].as_str().unwrap_or("strumento");
+                                items.push(json!({ "kind": "tool", "tool": nome.replace("mcp__", "").replace("__", " · "), "title": breve(&b["input"]), "input": b["input"], "done": false, "at": quando }));
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    let salta = items.len().saturating_sub(400);
+    let st = leggi_sessione(&file);
+    let running = headless_attivo(cartella) == Some(true) || (!st.finito && st.inattivo_da < 120);
+    json!({
+        "id": file.file_stem().map(|s| s.to_string_lossy().into_owned()),
+        "items": items.into_iter().skip(salta).collect::<Vec<_>>(),
+        "sessions": sessioni_vista,
+        "running": running,
+        "here": headless_attivo(cartella).is_some(),
+        "stuck": !st.finito && st.fermo_da >= 25 && headless_attivo(cartella) != Some(true),
+    })
 }

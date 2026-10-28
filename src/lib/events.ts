@@ -41,6 +41,8 @@ export interface EventMap {
   "open-settings": string;
   "mcp-status": McpStatus[];
   "palette-open": { agentId: string | null };
+  "dev-project": { folder: string };
+  "dev-session": { folder: string; done: boolean };
 }
 
 export function on<K extends keyof EventMap>(name: K, cb: (payload: EventMap[K]) => void): Promise<UnlistenFn> {

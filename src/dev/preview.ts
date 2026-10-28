@@ -34,7 +34,7 @@ let settings: Settings = {
   quietFrom: "22:00", quietTo: "07:30", briefingEnabled: true, briefingTime: "08:00", briefingDays: [1, 2, 3, 4, 5],
   accentHue: 275, accentChroma: 0.2, density: "comfortable", fontScale: 1, paletteHotkey: "Alt+Space", autostart: false, layout: "operator",
   mcpServers: [{ id: "m1", name: "issue", kind: "http", url: "https://issue.example.com/api/mcp", headersHelper: 'cat "$HOME/.issue/headers.json"', command: "", args: [], enabled: true }],
-  editorApp: "",
+  editorApp: "", devMode: "editor",
 };
 const keys = { anthropic: scenario !== "empty", openai: scenario !== "empty" };
 
@@ -228,6 +228,30 @@ export function installPreview() {
           return [now + 3600_000, now + 86400_000, now + 2 * 86400_000];
         case "hotkey_check":
           return null;
+        case "dev_projects":
+          return ["/Users/demo/Sviluppo/negozio"];
+        case "dev_open":
+          return a.folder;
+        case "dev_tree":
+          return a.folder === "/Users/demo/Sviluppo/negozio"
+            ? [{ name: "src", path: "/Users/demo/Sviluppo/negozio/src", dir: true }, { name: "package.json", path: "/Users/demo/Sviluppo/negozio/package.json", dir: false }, { name: "README.md", path: "/Users/demo/Sviluppo/negozio/README.md", dir: false }]
+            : [{ name: "carrello.ts", path: a.folder + "/carrello.ts", dir: false }, { name: "api.ts", path: a.folder + "/api.ts", dir: false }];
+        case "dev_file":
+          return { path: a.path, content: "export function totale(righe: Riga[]) {\n  return righe.reduce((s, r) => s + r.prezzo * r.qta, 0);\n}\n", binary: false, truncated: false, size: 120, ext: "ts" };
+        case "dev_git":
+          return { repo: true, branch: "feature/NEG-12-sconti", last: "a1b2c3d Carrello: righe e totale", changes: [{ status: "M", path: "/Users/demo/Sviluppo/negozio/src/carrello.ts", rel: "src/carrello.ts" }, { status: "??", path: "/Users/demo/Sviluppo/negozio/src/sconti.ts", rel: "src/sconti.ts" }] };
+        case "dev_diff":
+          return "diff --git a/src/carrello.ts b/src/carrello.ts\n@@ -1,3 +1,5 @@\n export function totale(righe: Riga[]) {\n-  return righe.reduce((s, r) => s + r.prezzo * r.qta, 0);\n+  const lordo = righe.reduce((s, r) => s + r.prezzo * r.qta, 0);\n+  return applicaSconto(lordo);\n }";
+        case "dev_session":
+          return { id: "s1", running: true, here: false, stuck: false, sessions: [{ id: "s1", title: "Aggiungi gli sconti al carrello", updatedAt: now }], items: [
+            { kind: "user", text: "Aggiungi gli sconti al carrello: codice sconto in percentuale, con test.", at: "" },
+            { kind: "text", text: "Guardo come è fatto il carrello.", at: "" },
+            { kind: "tool", tool: "Read", title: "src/carrello.ts", done: true, result: "export function totale…", at: "" },
+            { kind: "tool", tool: "Edit", title: "src/carrello.ts", done: true, at: "" },
+            { kind: "tool", tool: "Bash", title: "npm test", done: false, at: "" },
+          ] };
+        case "dev_processes":
+          return [{ id: "p1", name: "frontend", command: "npm run dev", folder: "/Users/demo/Sviluppo/negozio", running: true, exitCode: null, urls: ["http://localhost:5173/"], log: "VITE v8.3.5  ready in 312 ms\n\n  ➜  Local:   http://localhost:5173/" }];
         case "mcp_status":
           return [{ id: "m1", name: "issue", connected: true, connecting: false, tools: ["issue_list_my_issues", "issue_start_work"], error: null }];
         case "mcp_secret_has":

@@ -162,7 +162,18 @@
 
 <section>
   <h3>Sviluppo</h3>
-  <p class="help">Lo strumento «Sviluppa» affida il lavoro sul codice a Claude Code, nella cartella del progetto, con il tuo abbonamento: usa le istruzioni del progetto (CLAUDE.md) e i server MCP configurati in Claude Code. Modifica file, lancia build e test, fa commit; non fa push. Lo usa l'agente Sviluppatore.</p>
+  <p class="help">Lo Sviluppatore affida il codice a Claude Code nella cartella del progetto, con il tuo abbonamento: valgono le istruzioni del progetto (CLAUDE.md) e i server MCP configurati in Claude Code. Avvia backend e frontend e prova nel browser. Non fa push.</p>
+  <div class="field">
+    <span>Dove lavora lo Sviluppatore</span>
+    <div class="seg" role="radiogroup" aria-label="Dove lavora lo Sviluppatore">
+      <button role="radio" aria-checked={s.devMode !== "oltremare"} class:on={s.devMode !== "oltremare"} onclick={() => settings.save({ devMode: "editor" })}>
+        <strong>Nell'editor</strong><small>scrive a Claude nel pannello, come te; se non riesce, passa a Oltremare</small>
+      </button>
+      <button role="radio" aria-checked={s.devMode === "oltremare"} class:on={s.devMode === "oltremare"} onclick={() => settings.save({ devMode: "oltremare" })}>
+        <strong>In Oltremare</strong><small>Claude in background, seguito nella vista Sviluppo (⌘⇧D)</small>
+      </button>
+    </div>
+  </div>
   <label class="field">
     <span>Editor di codice</span>
     <select class="input" value={s.editorApp} onchange={(e) => settings.save({ editorApp: (e.target as HTMLSelectElement).value })}>

@@ -14,6 +14,8 @@ class UiState {
   showSettings = $state(false);
   settingsTab = $state<SettingsTab>("general");
   showPalette = $state(false);
+  /** Vista principale: chat con gli agenti, oppure lo spazio di sviluppo */
+  view = $state<"chat" | "dev">("chat");
   /** Agente in modifica: una copia, oppure "new" per crearne uno */
   editing = $state<Agent | "new" | null>(null);
   toasts = $state<Toast[]>([]);

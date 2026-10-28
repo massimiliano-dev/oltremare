@@ -102,6 +102,11 @@ Microsoft 365 e Outlook.com tramite Microsoft Graph, Gmail e Google tramite le l
   - «Scrivi a Claude nell'editor» porta in primo piano il progetto in VS Code (o in un'app derivata), scrive il messaggio nel pannello di Claude Code e preme Invio, come faresti tu.
   - «Segui Claude» legge la conversazione salvata da Claude Code e dice cosa sta facendo, se ha finito, se fa una domanda o se è fermo su una richiesta di permesso. Con un'attesa, aspetta la fine senza consumare passi.
   - I permessi nel pannello si danno guardando lo schermo e cliccando, con le stesse regole che useresti tu.
+- **Vista Sviluppo** (`⌘⇧D` o l'icona del terminale in alto): un piccolo IDE dentro Oltremare.
+  - Albero dei file, con i file cambiati evidenziati; visualizzatore di file e differenze git.
+  - La conversazione di Claude dal vivo, sia nel pannello dell'editor sia in background, con un campo per scrivergli «Nell'editor» o «Qui».
+  - I processi con i loro log e l'anteprima dell'app sull'indirizzo locale.
+- **Ripiego automatico**: se non si riesce a scrivere a Claude nell'editor (editor assente, permessi, messaggio non arrivato), Claude Code lavora in background sullo stesso progetto e la stessa conversazione, e lo segui nella vista Sviluppo. In Impostazioni → Strumenti esterni puoi scegliere di lavorare sempre in Oltremare.
 - **Processi in background**: backend, frontend e watcher restano accesi mentre l'agente lavora. L'agente ne legge i log e gli indirizzi locali e li ferma alla fine; si chiudono comunque con l'app.
 - **Prove nel browser**: l'agente apre l'app sull'indirizzo locale, clicca, compila e controlla che la funzione richiesta funzioni.
 - **Sviluppa in background** (facoltativo): affida un lavoro a Claude Code senza editor e restituisce riepilogo, stato git e sessione. Lo Sviluppatore non lo usa.

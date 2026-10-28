@@ -23,6 +23,8 @@
   import { mcp } from "./lib/state/mcp.svelte";
   import { layout } from "./lib/state/layout.svelte";
   import Gutter from "./lib/Gutter.svelte";
+  import DevView from "./lib/dev/DevView.svelte";
+  import { dev } from "./lib/state/dev.svelte";
   import { on } from "./lib/events";
   import { errorText } from "./lib/api";
 
@@ -31,7 +33,7 @@
   onMount(async () => {
     try {
       runs.listen();
-      await Promise.all([settings.load(), avatar.listen(), approvals.listen(), local.init(), voice.init(), accounts.init(), notifications.init(), mcp.init()]);
+      await Promise.all([settings.load(), avatar.listen(), approvals.listen(), local.init(), voice.init(), accounts.init(), notifications.init(), mcp.init(), dev.init()]);
       // Esecuzioni partite fuori dalla finestra (palette, briefing, trigger): si aprono qui
       on("open-run", (r) => runs.openRun(r.agentId, r.conversationId));
       on("open-settings", (tab) => ui.openSettings(tab as never));
@@ -116,6 +118,11 @@
       ui.editing = $state.snapshot(agents.selected);
       return;
     }
+    if (mod && e.shiftKey && k === "d") {
+      e.preventDefault();
+      ui.view = ui.view === "dev" ? "chat" : "dev";
+      return;
+    }
     if (mod && k === "b") {
       e.preventDefault();
       layout.toggle("agents");
@@ -149,6 +156,9 @@
 
 <div class="shell" class:mac={ui.isMac}>
   <Titlebar />
+  {#if ui.view === "dev"}
+    <DevView />
+  {:else}
   <main class="grid" class:ready style="grid-template-columns: {layout.cols.map((c, i) => (i ? 'auto ' : '') + (c.kind === 'chat' ? 'minmax(0, 1fr)' : `${layout.width(c.kind)}px`)).join(' ')}">
     {#each layout.cols as c, i (c.kind)}
       {#if i > 0}<Gutter left={layout.cols[i - 1].kind} right={c.kind} />{/if}
@@ -164,6 +174,7 @@
       {/if}
     {/each}
   </main>
+  {/if}
   {#if ui.editing}
     {#key ui.editing}
       <AgentEditor agent={ui.editing} />

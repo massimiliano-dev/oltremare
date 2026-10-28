@@ -134,6 +134,61 @@ export interface Settings {
   layout: string;
   mcpServers: McpServer[];
   editorApp: string;
+  devMode: "editor" | "oltremare";
+}
+
+export interface DevEntry {
+  name: string;
+  path: string;
+  dir: boolean;
+}
+
+export interface DevFile {
+  path: string;
+  content: string;
+  binary: boolean;
+  truncated: boolean;
+  size: number;
+  ext: string;
+}
+
+export interface DevGit {
+  repo: boolean;
+  branch?: string;
+  last?: string;
+  changes?: { status: string; path: string; rel: string }[];
+}
+
+export interface DevItem {
+  kind: "user" | "text" | "tool";
+  text?: string;
+  tool?: string;
+  title?: string;
+  input?: unknown;
+  result?: string;
+  error?: boolean;
+  done?: boolean;
+  at: string;
+}
+
+export interface DevSession {
+  id: string | null;
+  items: DevItem[];
+  sessions: { id: string; title: string; updatedAt: number }[];
+  running: boolean;
+  here?: boolean;
+  stuck?: boolean;
+}
+
+export interface DevProcess {
+  id: string;
+  name: string;
+  command: string;
+  folder: string;
+  running: boolean;
+  exitCode: number | null;
+  urls: string[];
+  log: string;
 }
 
 export interface McpServer {
@@ -419,6 +474,17 @@ export const api = {
   mcpSecretSet: (id: string, kind: "headers" | "env", value: string) => invoke<void>("mcp_secret_set", { id, kind, value }),
   mcpSecretHas: (id: string) => invoke<{ headers: boolean; env: boolean }>("mcp_secret_has", { id }),
   mcpImportClaude: () => invoke<string[]>("mcp_import_claude"),
+  devProjects: () => invoke<string[]>("dev_projects"),
+  devOpen: (folder: string) => invoke<string>("dev_open", { folder }),
+  devTree: (folder: string) => invoke<DevEntry[]>("dev_tree", { folder }),
+  devFile: (path: string) => invoke<DevFile>("dev_file", { path }),
+  devGit: (folder: string) => invoke<DevGit>("dev_git", { folder }),
+  devDiff: (folder: string, file?: string) => invoke<string>("dev_diff", { folder, file }),
+  devSession: (folder: string, session?: string) => invoke<DevSession>("dev_session", { folder, session }),
+  devProcesses: () => invoke<DevProcess[]>("dev_processes"),
+  devSend: (folder: string, message: string, opts: { session?: string; newSession?: boolean; here?: boolean } = {}) =>
+    invoke<string>("dev_send", { folder, message, session: opts.session, newSession: opts.newSession, here: opts.here }),
+  devStop: (folder: string) => invoke<boolean>("dev_stop", { folder }),
   editors: () => invoke<{ name: string; path: string }[]>("editors_list"),
   paletteToggle: () => invoke<void>("palette_toggle"),
   paletteHide: () => invoke<void>("palette_hide"),
