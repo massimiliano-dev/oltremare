@@ -7,6 +7,9 @@
   import { dev } from "../state/dev.svelte";
   import { studio, type Task } from "../state/studio.svelte";
   import { settings } from "../state/settings.svelte";
+  import ToolGlyph, { toolKind, TOOL_LABEL } from "./ToolGlyph.svelte";
+  import FileIcon from "../dev/FileIcon.svelte";
+  import type { DevItem } from "../api";
 
   let { prompt = "" }: { prompt?: string } = $props();
   let text = $state("");
@@ -18,6 +21,28 @@
   const KIND: Record<string, string> = { domanda: "Domanda", piccola: "Modifica piccola", media: "Lavoro medio", grande: "Lavoro grande" };
   const MODEL: Record<string, string> = { haiku: "Haiku", sonnet: "Sonnet", opus: "Opus", fable: "Fable", auto: "Auto" };
   const items = $derived(dev.session?.items ?? []);
+  /** Le azioni consecutive di Claude si raggruppano in un blocco con la guida di rientro */
+  const blocks = $derived.by(() => {
+    const out: { kind: "user" | "text" | "tools"; start: number; items: DevItem[] }[] = [];
+    items.forEach((it, i) => {
+      const k = it.kind === "tool" ? "tools" : it.kind;
+      const last = out.at(-1);
+      if (k === "tools" && last?.kind === "tools") last.items.push(it);
+      else out.push({ kind: k, start: i, items: [it] });
+    });
+    return out;
+  });
+  /** Colore di ogni modello e tipo di richiesta (lo stesso nei selettori) */
+  const MODEL_HUE: Record<string, number> = { haiku: 150, sonnet: 240, opus: 290, fable: 80, auto: 262 };
+  const KIND_HUE: Record<string, number> = { domanda: 195, piccola: 150, media: 240, grande: 35 };
+  /** Un'azione su un file: icona del file, nome e cartella */
+  function fileOf(title: string | undefined) {
+    const t = (title ?? "").trim();
+    if (!t || /\s/.test(t) || !/\.[a-z0-9]{1,6}$/i.test(t)) return null;
+    const parts = t.split(/[\\/]/);
+    const name = parts.pop() ?? t;
+    return { name, dir: parts.slice(-2).join("/") };
+  }
   const running = $derived(!!dev.session?.running);
   const profiles = $derived(studio.claudex?.profiles ?? []);
   const aiName = (p: string) => (p ? p : "Claude");
@@ -84,6 +109,7 @@
 
 <section class="orch">
   <header>
+    <span class="hicon"><Icon name="spark" size={14} /></span>
     <strong>Orchestratore</strong>
     {#if running}<span class="live"><span class="pulse"></span>{dev.session?.stuck ? "fermo" : "al lavoro"}</span>{/if}
     <span class="sp"></span>
@@ -106,17 +132,36 @@
         <p>Con il piano, Claude prima analizza senza toccare nulla; quando approvi, scrive il codice.</p>
       </div>
     {/if}
-    {#each items as it, i (i)}
-      {#if it.kind === "user"}
-        <div class="u">{it.text}</div>
-      {:else if it.kind === "text"}
-        <div class="md a">{@html markdown(it.text ?? "")}</div>
+    {#each blocks as b (b.start)}
+      {#if b.kind === "user"}
+        <div class="u">{b.items[0].text}</div>
+      {:else if b.kind === "text"}
+        <div class="md a">{@html markdown(b.items[0].text ?? "")}</div>
       {:else}
-        <button class="tool" class:err={it.error} onclick={() => (openItems[i] = !openItems[i])}>
-          {#if !it.done}<span class="spin"></span>{:else if it.error}<Icon name="x" size={12} />{:else}<Icon name="check" size={12} />{/if}
-          <strong>{it.tool}</strong><span>{it.title}</span>
-        </button>
-        {#if openItems[i] && it.result}<pre class="res">{it.result}</pre>{/if}
+        <ol class="acts" aria-label="{b.items.length} azioni di Claude">
+          {#each b.items as it, j (j)}
+            {@const i = b.start + j}
+            {@const k = toolKind(it.tool ?? "")}
+            {@const f = fileOf(it.title)}
+            <li>
+              <button class="act" class:err={it.error} class:open={openItems[i]} onclick={() => (openItems[i] = !openItems[i])} disabled={!it.result}>
+                <ToolGlyph kind={k} />
+                <span class="verb">{k === "mcp" || k === "other" ? it.tool : TOOL_LABEL[k]}</span>
+                {#if f}
+                  <FileIcon name={f.name} size={14} />
+                  <span class="fname">{f.name}</span>
+                  {#if f.dir}<span class="fdir">{f.dir}</span>{/if}
+                {:else}
+                  <span class="target" class:cmd={k === "bash"}>{it.title}</span>
+                {/if}
+                <span class="state">
+                  {#if !it.done}<span class="spin"></span>{:else if it.error}<span class="pill bad">errore</span>{:else}<span class="pill ok"><Icon name="check" size={10} /></span>{/if}
+                </span>
+              </button>
+              {#if openItems[i] && it.result}<pre class="res">{it.result}</pre>{/if}
+            </li>
+          {/each}
+        </ol>
       {/if}
     {/each}
 
@@ -129,10 +174,10 @@
         </div>
         {#if t.decision}
           <div class="chips">
-            <span class="k-{t.decision.kind}">{KIND[t.decision.kind] ?? t.decision.kind}</span>
-            <span>{MODEL[t.model] ?? t.model}</span>
-            <span>{t.plan ? "con piano" : "senza piano"}</span>
-            <span>{aiName(t.profile)}</span>
+            <span style="--h:{KIND_HUE[t.decision.kind] ?? 262}">{KIND[t.decision.kind] ?? t.decision.kind}</span>
+            <span style="--h:{MODEL_HUE[t.model] ?? 262}"><span class="mdot"></span>{MODEL[t.model] ?? t.model}</span>
+            <span style="--h:285">{t.plan ? "con piano" : "senza piano"}</span>
+            <span style="--h:{t.profile ? 35 : 275}">{aiName(t.profile)}</span>
           </div>
           {#if t.decision.reason}<small class="why">{t.decision.reason}</small>{/if}
         {/if}
@@ -177,7 +222,7 @@
   <div class="composer">
     <textarea class="input" rows="3" bind:value={text} onkeydown={key} placeholder={running ? "Claude sta lavorando…" : `Cosa facciamo su ${studio.project?.name ?? "questo progetto"}?`}></textarea>
     <div class="ctl">
-      <label title="Modello: Auto lascia scegliere all'orchestratore">
+      <label title="Modello: Auto lascia scegliere all'orchestratore" style="--h:{MODEL_HUE[studio.modelChoice]}">
         <Icon name="cpu" size={13} />
         <select bind:value={studio.modelChoice} aria-label="Modello">
           <option value="auto">Modello auto</option>
@@ -187,7 +232,7 @@
           <option value="fable">Fable</option>
         </select>
       </label>
-      <label title="Piano: Auto decide in base alla richiesta">
+      <label title="Piano: Auto decide in base alla richiesta" style="--h:285">
         <Icon name="all" size={13} />
         <select bind:value={studio.planChoice} aria-label="Piano">
           <option value="auto">Piano auto</option>
@@ -195,7 +240,7 @@
           <option value="no">Senza piano</option>
         </select>
       </label>
-      <label title="Quale AI fa il lavoro">
+      <label title="Quale AI fa il lavoro" style="--h:{studio.profile ? 35 : 275}">
         <Icon name="spark" size={13} />
         <select bind:value={studio.profile} aria-label="AI">
           <option value="">Claude</option>
@@ -229,6 +274,15 @@
   }
   header strong {
     font-size: var(--t-sm);
+  }
+  .hicon {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 14%, transparent);
   }
   .sp {
     flex: 1;
@@ -273,44 +327,122 @@
   .u {
     align-self: flex-end;
     max-width: 90%;
-    padding: 8px 11px;
-    border-radius: 12px 12px 4px 12px;
-    background: var(--accent-mist);
+    padding: 9px 12px;
+    border-radius: 14px 14px 4px 14px;
+    background: linear-gradient(135deg, color-mix(in oklch, var(--accent) 16%, var(--paper)), color-mix(in oklch, var(--accent) 9%, var(--paper)));
     white-space: pre-wrap;
     font-size: var(--t-sm);
   }
   .a {
     font-size: var(--t-sm);
   }
-  .tool {
+  .acts {
+    position: relative;
+    list-style: none;
+    margin: 2px 0;
+    padding: 0 0 0 10px;
+    display: grid;
+    gap: 1px;
+  }
+  /* Guida di rientro, come nell'esplora file */
+  .acts::before {
+    content: "";
+    position: absolute;
+    top: 6px;
+    bottom: 6px;
+    left: 3px;
+    width: 1px;
+    background: var(--rule-soft);
+  }
+  .act {
+    width: 100%;
     display: flex;
     align-items: center;
     gap: 7px;
-    width: 100%;
-    padding: 3px 6px;
-    border-radius: 6px;
-    font-size: var(--t-xs);
-    color: var(--ink-3);
-    text-align: left;
     min-width: 0;
-  }
-  .tool:hover {
-    background: var(--paper-2);
-  }
-  .tool strong {
+    height: 30px;
+    padding: 0 6px 0 4px;
+    border-radius: 8px;
+    font-size: var(--t-sm);
+    text-align: left;
     color: var(--ink-2);
-    flex: none;
+    transition: background-color 0.12s;
   }
-  .tool span {
+  .act:not(:disabled):hover,
+  .act.open {
+    background: color-mix(in oklch, var(--accent) 7%, transparent);
+  }
+  .act:disabled {
+    cursor: default;
+  }
+  .verb {
+    flex: none;
+    font-weight: 650;
+    color: var(--ink);
+  }
+  .fname {
+    flex: none;
+    max-width: 45%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: var(--ink);
   }
-  .tool.err {
-    color: var(--danger);
+  .fdir,
+  .target {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+  }
+  .fdir {
+    direction: rtl;
+    text-align: left;
+  }
+  .target.cmd {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11.5px;
+    color: var(--ink-2);
+  }
+  .state {
+    flex: none;
+    margin-left: auto;
+    display: grid;
+    place-items: center;
+    min-width: 18px;
+  }
+  .pill {
+    display: inline-grid;
+    place-items: center;
+    height: 17px;
+    min-width: 17px;
+    padding: 0 5px;
+    border-radius: 999px;
+    font-size: 0.62rem;
+    font-weight: 750;
+  }
+  .pill.ok {
+    color: oklch(0.45 0.13 150);
+    background: oklch(0.78 0.13 150 / 0.28);
+  }
+  .pill.bad {
+    color: oklch(0.5 0.17 25);
+    background: oklch(0.75 0.14 25 / 0.25);
+  }
+  :global([data-theme="dark"]) .pill.ok {
+    color: oklch(0.85 0.13 150);
+  }
+  :global([data-theme="dark"]) .pill.bad {
+    color: oklch(0.82 0.13 25);
+  }
+  .act.err .verb {
+    color: oklch(0.55 0.17 25);
   }
   .res {
-    margin: 0 0 4px 24px;
+    margin: 2px 0 6px 33px;
     max-height: 200px;
     overflow: auto;
     padding: 8px;
@@ -360,21 +492,26 @@
     flex-wrap: wrap;
     gap: 5px;
   }
-  .chips span {
-    padding: 2px 8px;
+  .chips > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 9px;
     border-radius: 999px;
     font-size: 0.7rem;
     font-weight: 650;
-    color: var(--accent);
-    background: var(--accent-mist);
+    color: oklch(0.45 0.14 var(--h));
+    background: oklch(0.75 0.12 var(--h) / 0.2);
   }
-  .chips .k-grande {
-    color: oklch(0.5 0.16 30);
-    background: oklch(0.65 0.15 30 / 0.14);
+  :global([data-theme="dark"]) .chips > span {
+    color: oklch(0.85 0.11 var(--h));
+    background: oklch(0.6 0.12 var(--h) / 0.25);
   }
-  .chips .k-piccola {
-    color: oklch(0.45 0.12 155);
-    background: oklch(0.65 0.12 155 / 0.14);
+  .mdot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: oklch(0.6 0.16 var(--h));
   }
   .why {
     font-size: var(--t-xs);
@@ -436,8 +573,13 @@
     padding: 0 4px 0 8px;
     height: 28px;
     border-radius: 999px;
-    background: var(--paper-2);
-    color: var(--ink-3);
+    background: oklch(0.75 0.12 var(--h, 262) / 0.16);
+    color: oklch(0.5 0.14 var(--h, 262));
+    transition: background-color 0.15s, color 0.15s;
+  }
+  :global([data-theme="dark"]) .ctl label {
+    background: oklch(0.6 0.12 var(--h, 262) / 0.22);
+    color: oklch(0.82 0.11 var(--h, 262));
   }
   .ctl select {
     border: 0;

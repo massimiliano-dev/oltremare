@@ -295,12 +295,16 @@ export function installPreview() {
         case "dev_diff":
           return "diff --git a/src/carrello.ts b/src/carrello.ts\n@@ -1,3 +1,5 @@\n export function totale(righe: Riga[]) {\n-  return righe.reduce((s, r) => s + r.prezzo * r.qta, 0);\n+  const lordo = righe.reduce((s, r) => s + r.prezzo * r.qta, 0);\n+  return applicaSconto(lordo);\n }";
         case "dev_session":
-          return { id: "s1", running: true, here: false, stuck: false, sessions: [{ id: "s1", title: "Aggiungi gli sconti al carrello", updatedAt: now }], items: [
+          return { id: "s1", running: false, here: false, stuck: false, sessions: [{ id: "s1", title: "Aggiungi gli sconti al carrello", updatedAt: now }], items: [
             { kind: "user", text: "Aggiungi gli sconti al carrello: codice sconto in percentuale, con test.", at: "" },
-            { kind: "text", text: "Guardo come è fatto il carrello.", at: "" },
+            { kind: "tool", tool: "keyops · get_issue", title: "OLT-12", done: true, result: "# OLT-12 Sconti nel carrello", at: "" },
+            { kind: "text", text: "Ho letto la issue: guardo come è fatto il carrello.", at: "" },
             { kind: "tool", tool: "Read", title: "src/carrello.ts", done: true, result: "export function totale…", at: "" },
-            { kind: "tool", tool: "Edit", title: "src/carrello.ts", done: true, at: "" },
-            { kind: "tool", tool: "Bash", title: "npm test", done: false, at: "" },
+            { kind: "tool", tool: "Grep", title: "applicaSconto", done: true, result: "nessun risultato", at: "" },
+            { kind: "tool", tool: "Write", title: "src/sconti.ts", done: true, at: "" },
+            { kind: "tool", tool: "Edit", title: "src/components/Carrello.svelte", done: true, at: "" },
+            { kind: "tool", tool: "WebSearch", title: "vitest percentuale arrotondamento", done: true, at: "" },
+            { kind: "tool", tool: "Bash", title: "npm test -- carrello", done: false, at: "" },
           ] };
         case "dev_processes":
           return [{ id: "p1", name: "frontend", command: "npm run dev", folder: "/Users/demo/Sviluppo/negozio", running: true, exitCode: null, urls: ["http://localhost:5173/"], log: "VITE v8.3.5  ready in 312 ms\n\n  ➜  Local:   http://localhost:5173/" }];
