@@ -326,6 +326,17 @@ impl Db {
         Ok(json!({ "since": inizio, "days": giorni, "providers": per }))
     }
 
+    /// Lavoro svolto fuori dal ciclo degli agenti (Studio, Claude Code in background): solo per le statistiche.
+    #[allow(clippy::too_many_arguments)]
+    pub fn registra_esterna(&self, id: &str, sessione: &str, agente: &str, titolo: &str, stato: &str, inizio: i64, fine: i64, usage: &Usage, costo: Option<f64>, modello: Option<&str>, provider: &str) -> Result<()> {
+        self.conn().execute(
+            "INSERT OR REPLACE INTO esecuzioni (id, conversazione_id, agent_id, titolo, sorgente, stato, inizio, fine, usage, costo, modello_servito, provider)
+             VALUES (?1, ?2, ?3, ?4, 'studio', ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![id, sessione, agente, titolo, stato, inizio, fine, serde_json::to_string(usage)?, costo, modello, provider],
+        )?;
+        Ok(())
+    }
+
     pub fn chiudi_run(
         &self,
         id: &str,

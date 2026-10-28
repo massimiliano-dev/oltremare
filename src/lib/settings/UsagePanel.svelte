@@ -14,9 +14,12 @@
     stats = await api.usageStats().catch(() => null);
   });
 
-  const ORDER: Provider[] = ["claude-code", "anthropic", "openai", "local"];
+  type P = Provider | "claudex";
+  const ORDER: P[] = ["claude-code", "anthropic", "openai", "claudex", "local"];
   const list = $derived(ORDER.filter((p) => stats?.providers[p]).map((p) => [p, stats!.providers[p]!] as const));
-  const paid = (p: Provider) => p === "anthropic" || p === "openai";
+  const paid = (p: P) => p === "anthropic" || p === "openai";
+  const nome = (p: P) => (p === "claudex" ? "Altre AI (Claudex)" : providerLabel(p));
+  const agente = (id: string) => agents.byId(id)?.name ?? (id === "studio" ? "Studio" : "Agente eliminato");
   const sub = $derived(stats?.subscription ?? null);
 
   function giorno(i: number) {
@@ -25,11 +28,11 @@
   }
 
   /** La grandezza del grafico: costo per i provider a pagamento, token per gli altri. */
-  function serie(p: Provider, u: UsageProvider) {
+  function serie(p: P, u: UsageProvider) {
     return u.daily.map((d) => (paid(p) ? d.cost : d.tokens));
   }
 
-  function fmt(p: Provider, v: number) {
+  function fmt(p: P, v: number) {
     return paid(p) ? money(v) : `${tokens(v)} token`;
   }
 
@@ -82,8 +85,8 @@
     {@const g = geometry(vals)}
     <div class="prov">
       <div class="phead">
-        <strong>{providerLabel(p)}</strong>
-        <small>{p === "claude-code" ? "incluso nel piano" : paid(p) ? "costo stimato dai token" : "sul tuo computer, gratis"}</small>
+        <strong>{nome(p)}</strong>
+        <small>{p === "claude-code" ? "incluso nel piano" : paid(p) ? "costo stimato dai token" : p === "claudex" ? "con i tuoi abbonamenti o chiavi" : "sul tuo computer, gratis"}</small>
       </div>
 
       {#if p === "claude-code" && sub}
@@ -102,7 +105,7 @@
             <span class="tv">{paid(p) ? money(t.cost ?? 0) : `${t.runs ?? 0} richieste`}</span>
             <span class="ts">
               {#if paid(p)}{t.runs ?? 0} richieste · {/if}{tokens((t.input ?? 0) + (t.output ?? 0))} token{#if (t.searches ?? 0) > 0} · {t.searches} ricerche{/if}
-              {#if p === "claude-code" && (t.value ?? 0) > 0}<br />valore API {money(t.value ?? 0)}{/if}
+              {#if (p === "claude-code" || p === "claudex") && (t.value ?? 0) > 0}<br />valore API {money(t.value ?? 0)}{/if}
             </span>
           </div>
         {/each}
@@ -137,7 +140,7 @@
           <div>
             <span class="sh">Agenti</span>
             {#each top(u.agents) as [id, t] (id)}
-              <div class="li"><span>{agents.byId(id)?.name ?? "Agente eliminato"}</span><em>{t.runs} · {paid(p) ? money(t.cost ?? 0) : `${tokens((t.input ?? 0) + (t.output ?? 0))}`}</em></div>
+              <div class="li"><span>{agente(id)}</span><em>{t.runs} · {paid(p) ? money(t.cost ?? 0) : `${tokens((t.input ?? 0) + (t.output ?? 0))}`}</em></div>
             {/each}
           </div>
           <div>

@@ -235,7 +235,7 @@ export function installPreview() {
             since: now - 29 * 86400_000, days: 30,
             subscription: { status: "allowed", resetsAt: Math.floor(now / 1000) + 7200, rateLimitType: "five_hour", overageStatus: "rejected", isUsingOverage: false },
             providers: {
-              "claude-code": { today: { runs: 42, input: 3029143, output: 47408, value: 18.4 }, week: { runs: 120, input: 8100000, output: 140000, value: 51.2 }, month: { runs: 260, input: 17000000, output: 310000, value: 112.7 }, daily, models: { "claude-opus-5": { runs: 240 }, "claude-sonnet-5": { runs: 20 } }, agents: { assistente: { runs: 150, input: 9000000 }, ricercatore: { runs: 80, input: 6000000 } } },
+              "claude-code": { today: { runs: 42, input: 3029143, output: 47408, value: 18.4 }, week: { runs: 120, input: 8100000, output: 140000, value: 51.2 }, month: { runs: 260, input: 17000000, output: 310000, value: 112.7 }, daily, models: { "claude-opus-5": { runs: 240 }, "claude-sonnet-5": { runs: 20 } }, agents: { studio: { runs: 96, input: 11000000 }, assistente: { runs: 150, input: 9000000 }, ricercatore: { runs: 80, input: 6000000 } } },
               openai: { today: { runs: 3, input: 21000, output: 4000, cost: 0.34 }, week: { runs: 18, input: 120000, output: 30000, cost: 2.1 }, month: { runs: 50, input: 400000, output: 90000, cost: 6.8 }, daily: dailyApi, models: { "gpt-5": { runs: 50, cost: 6.8 } }, agents: { ricercatore: { runs: 50, cost: 6.8 } } },
             },
           };
@@ -261,6 +261,17 @@ export function installPreview() {
           return { issues: [{ key: "OLT-12", title: "Sconti nel carrello", status: "In corso", extra: null }, { key: "OLT-9", title: "Esportazione PDF delle fatture", status: "Da fare", extra: null }, { key: "OLT-4", title: "Login con Google", status: "In revisione", extra: null }] };
         case "studio_issue":
           return "# OLT-12 Sconti nel carrello\nStato: In corso\n\n## Descrizione\nCodice sconto in percentuale, con test.";
+        case "studio_commands":
+          return [
+            { label: "App desktop", command: "npm run tauri dev", cwd: "/x", rel: "", kind: "tauri", priority: 105 },
+            { label: "Sviluppo", command: "npm run dev", cwd: "/x", rel: "", kind: "web", priority: 100 },
+            { label: "Sviluppo · backend", command: "npm run dev", cwd: "/x/backend", rel: "backend", kind: "web", priority: 95 },
+            { label: "Docker Compose", command: "docker compose up", cwd: "/x", rel: "", kind: "docker", priority: 70 },
+            { label: "Test", command: "npm run test", cwd: "/x", rel: "", kind: "task", priority: 40 },
+          ];
+        case "studio_launch":
+          await wait(800);
+          return "Processo avviato";
         case "studio_claudex":
           return { installed: false, profiles: [] };
         case "studio_classify":

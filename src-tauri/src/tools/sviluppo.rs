@@ -703,6 +703,10 @@ pub async fn avvia_headless_con(app: &AppHandle, cartella: &Path, messaggio: &st
     let pid = figlio.id();
     let stdout = figlio.stdout.take().ok_or("uscita non disponibile")?;
     let sid = std::sync::Arc::new(std::sync::Mutex::new(sessione.clone().unwrap_or_default()));
+    // Per le statistiche di utilizzo: chi ha lavorato (abbonamento Claude o un'altra AI via Claudex) e su cosa
+    let inizio = crate::store::now_ms();
+    let provider = if o.ambiente.iter().any(|(k, _)| k == "ANTHROPIC_BASE_URL") { "claudex" } else { "claude-code" };
+    let titolo: String = messaggio.chars().take(80).collect();
     let finito: std::sync::Arc<std::sync::Mutex<Option<(bool, String)>>> = Default::default();
     let (tx, rx) = tokio::sync::oneshot::channel::<String>();
     {
@@ -719,9 +723,30 @@ pub async fn avvia_headless_con(app: &AppHandle, cartella: &Path, messaggio: &st
                         let _ = t.send(id.to_string());
                     }
                 }
+                if v["type"] == "rate_limit_event" && provider == "claude-code" {
+                    let mut info = v["rate_limit_info"].clone();
+                    info["at"] = json!(crate::store::now_ms());
+                    let _ = app.state::<App>().store.set_pref("abbonamento:limiti", info);
+                }
                 if v["type"] == "result" {
                     *finito.lock().unwrap_or_else(|e| e.into_inner()) = Some((v["is_error"].as_bool() == Some(true), v["result"].as_str().unwrap_or_default().to_string()));
                     let _ = app.emit("dev-session", json!({ "folder": cartella.to_string_lossy(), "done": true }));
+                    // Consumi del lavoro, come per gli agenti
+                    let u = &v["usage"];
+                    let usage = crate::providers::Usage {
+                        input_tokens: u["input_tokens"].as_u64().unwrap_or(0),
+                        output_tokens: u["output_tokens"].as_u64().unwrap_or(0),
+                        cache_read: u["cache_read_input_tokens"].as_u64().unwrap_or(0),
+                        cache_write: u["cache_creation_input_tokens"].as_u64().unwrap_or(0),
+                        web_search: u["server_tool_use"]["web_search_requests"].as_u64().unwrap_or(0),
+                        valore: v["total_cost_usd"].as_f64().unwrap_or(0.0),
+                    };
+                    let modello = v["modelUsage"].as_object().and_then(|m| m.iter().max_by(|a, b| a.1["costUSD"].as_f64().unwrap_or(0.0).total_cmp(&b.1["costUSD"].as_f64().unwrap_or(0.0))).map(|(k, _)| k.clone()));
+                    let sessione = sid.lock().map(|x| x.clone()).unwrap_or_default();
+                    let stato = if v["is_error"].as_bool() == Some(true) { "error" } else { "done" };
+                    let _ = app.state::<App>().db.registra_esterna(
+                        &uuid::Uuid::new_v4().to_string(), &sessione, "studio", &titolo, stato, inizio, crate::store::now_ms(), &usage, None, modello.as_deref(), provider,
+                    );
                 }
             }
             let mut f = finito.lock().unwrap_or_else(|e| e.into_inner());

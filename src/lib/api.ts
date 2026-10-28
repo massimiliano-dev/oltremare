@@ -161,7 +161,7 @@ export interface UsageProvider {
 export interface UsageStats {
   since: number;
   days: number;
-  providers: Partial<Record<Provider, UsageProvider>>;
+  providers: Partial<Record<Provider | "claudex", UsageProvider>>;
   subscription: { status?: string; resetsAt?: number; rateLimitType?: string; overageStatus?: string; overageDisabledReason?: string; isUsingOverage?: boolean; at?: number } | null;
 }
 
@@ -559,6 +559,9 @@ export const api = {
   studioLinkSet: (project: string, server: string, key: string, name: string) => invoke<void>("studio_link_set", { project, server, key, name }),
   studioLinkSuggest: (project: string, server: string) => invoke<{ key: string; name: string }[]>("studio_link_suggest", { project, server }),
   studioIssues: (project: string) => invoke<{ issues: { key: string; title: string; status: string; extra: string | null }[] }>("studio_issues", { project }),
+  studioCommands: (project: string) => invoke<{ label: string; command: string; cwd: string; rel: string; kind: string; priority: number }[]>("studio_commands", { project }),
+  studioLaunch: (project: string, cwd: string, command: string, name: string) => invoke<string>("studio_launch", { project, cwd, command, name }),
+  studioStop: (id: string) => invoke<void>("studio_stop", { id }),
   studioIssue: (project: string, key: string) => invoke<string>("studio_issue", { project, key }),
   editors: () => invoke<{ name: string; path: string }[]>("editors_list"),
   paletteToggle: () => invoke<void>("palette_toggle"),

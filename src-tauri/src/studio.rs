@@ -528,6 +528,16 @@ mod prove {
 
     #[test]
     #[ignore]
+    fn comandi_veri() {
+        let h = crate::shell_env::home().unwrap();
+        for p in ["Desktop/Sviluppo/FarmaQuest/FarmaQuest", "Desktop/Sviluppo/KeyOps", "Desktop/Personale/Suites/Oltremare"] {
+            let c = super::comandi(&h.join(p));
+            println!("{p}: {}", c.iter().take(6).map(|x| format!("{} [{}]", x["label"].as_str().unwrap(), x["command"].as_str().unwrap())).collect::<Vec<_>>().join(" | "));
+        }
+    }
+
+    #[test]
+    #[ignore]
     fn scansione_vera() {
         let h = crate::shell_env::home().unwrap();
         let mut n = 0;
@@ -623,4 +633,105 @@ pub async fn studio_issues(handle: AppHandle, project: String) -> Result<Value> 
 pub async fn studio_issue(handle: AppHandle, project: String, key: String) -> Result<String> {
     let link = handle.state::<App>().store.settings().studio_links.get(&project).cloned().ok_or_else(|| AppError::msg("Progetto non collegato"))?;
     crate::mcp_client::chiama_server(&handle, &link.server, "get_issue", json!({ "key": key })).await.map_err(AppError::msg)
+}
+
+// ---------- Avvio delle app in locale ----------
+
+fn gestore_pacchetti(p: &Path) -> &'static str {
+    if p.join("pnpm-lock.yaml").exists() {
+        "pnpm"
+    } else if p.join("yarn.lock").exists() {
+        "yarn"
+    } else if p.join("bun.lockb").exists() || p.join("bun.lock").exists() {
+        "bun"
+    } else {
+        "npm"
+    }
+}
+
+/// I comandi con cui il progetto (o una sua parte: frontend/, backend/…) si avvia in locale.
+#[tauri::command]
+pub fn studio_commands(app: State<'_, App>, project: String) -> Result<Vec<Value>> {
+    let radice = cartella(&app, &project)?;
+    Ok(comandi(&radice))
+}
+
+fn comandi(radice: &Path) -> Vec<Value> {
+    let radice = radice.to_path_buf();
+    let mut v: Vec<Value> = vec![];
+    for dir in livelli(&radice) {
+        let rel = dir.strip_prefix(&radice).map(|r| r.to_string_lossy().into_owned()).unwrap_or_default();
+        let parte = if rel.is_empty() { String::new() } else { format!(" · {rel}") };
+        let mut aggiungi = |etichetta: String, comando: String, tipo: &str, priorita: i64| {
+            v.push(json!({ "label": etichetta, "command": comando, "cwd": dir.to_string_lossy(), "rel": rel, "kind": tipo, "priority": priorita }));
+        };
+        if let Ok(t) = std::fs::read_to_string(dir.join("package.json")) {
+            let pkg: Value = serde_json::from_str(&t).unwrap_or(Value::Null);
+            let pm = gestore_pacchetti(&dir).to_string();
+            let esegui = |s: &str| if pm == "npm" { format!("npm run {s}") } else { format!("{pm} {s}") };
+            if let Some(scripts) = pkg["scripts"].as_object() {
+                if scripts.contains_key("tauri") && dir.join("src-tauri").is_dir() {
+                    aggiungi(format!("App desktop{parte}"), esegui("tauri dev"), "tauri", 105);
+                }
+                for (nome, etichetta, prio) in [("dev", "Sviluppo", 100), ("start", "Avvia", 90), ("serve", "Server", 85), ("preview", "Anteprima della build", 60), ("storybook", "Storybook", 50), ("test", "Test", 40), ("build", "Build", 30), ("lint", "Lint", 20)] {
+                    if scripts.contains_key(nome) {
+                        aggiungi(format!("{etichetta}{parte}"), esegui(nome), if nome == "test" || nome == "build" || nome == "lint" { "task" } else { "web" }, prio - if rel.is_empty() { 0 } else { 5 });
+                    }
+                }
+            }
+            if !dir.join("node_modules").is_dir() {
+                aggiungi(format!("Installa le dipendenze{parte}"), format!("{} install", gestore_pacchetti(&dir)), "setup", 10);
+            }
+        }
+        if dir.join("docker-compose.yml").exists() || dir.join("compose.yaml").exists() {
+            aggiungi(format!("Docker Compose{parte}"), "docker compose up".into(), "docker", 70);
+        }
+        if dir.join("Cargo.toml").exists() && !dir.join("package.json").exists() && !dir.ends_with("src-tauri") {
+            aggiungi(format!("Cargo run{parte}"), "cargo run".into(), "rust", 65);
+        }
+        if dir.join("manage.py").exists() {
+            aggiungi(format!("Django{parte}"), "python3 manage.py runserver".into(), "python", 80);
+        } else if std::fs::read_to_string(dir.join("requirements.txt")).unwrap_or_default().to_lowercase().contains("fastapi") {
+            let modulo = ["main.py", "app.py", "app/main.py"].iter().find(|f| dir.join(f).exists()).map(|f| f.trim_end_matches(".py").replace('/', ".")).unwrap_or_else(|| "main".into());
+            aggiungi(format!("FastAPI{parte}"), format!("uvicorn {modulo}:app --reload"), "python", 80);
+        }
+        if dir.join("pubspec.yaml").exists() {
+            aggiungi(format!("Flutter{parte}"), "flutter run -d macos".into(), "flutter", 75);
+        }
+        if std::fs::read_dir(&dir).map(|rd| rd.flatten().any(|e| e.file_name().to_string_lossy().ends_with(".csproj"))).unwrap_or(false) {
+            aggiungi(format!(".NET{parte}"), "dotnet run".into(), "dotnet", 75);
+        }
+        if dir.join("go.mod").exists() {
+            aggiungi(format!("Go{parte}"), "go run .".into(), "go", 70);
+        }
+    }
+    v.sort_by(|a, b| b["priority"].as_i64().cmp(&a["priority"].as_i64()));
+    v.truncate(16);
+    v
+}
+
+#[tauri::command]
+pub async fn studio_launch(app: State<'_, App>, project: String, cwd: String, command: String, name: String) -> Result<String> {
+    let radice = cartella(&app, &project)?;
+    let dir = cartella(&app, &cwd)?;
+    if !dir.starts_with(&radice) {
+        return Err(AppError::msg("La cartella non fa parte del progetto"));
+    }
+    let input = json!({ "comando": command, "cartella": dir.to_string_lossy(), "nome": name, "attendi_secondi": 12 });
+    let e = crate::tools::processi::esegui("avvia_processo", &input, &[radice]).await;
+    if e.is_error {
+        Err(AppError::msg(e.testo))
+    } else {
+        Ok(e.testo)
+    }
+}
+
+#[tauri::command]
+pub async fn studio_stop(id: String) -> Result<()> {
+    let e = crate::tools::processi::esegui("ferma_processo", &json!({ "id": id }), &[]).await;
+    if e.is_error {
+        Err(AppError::msg(e.testo))
+    } else {
+        Ok(())
+    }
 }
