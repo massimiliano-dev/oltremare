@@ -2,6 +2,7 @@
   // Lo spazio di lavoro dello Studio: esplora file, editor a schede, differenze, anteprima, processi, orchestratore.
   import Icon from "../Icon.svelte";
   import FileTree from "../dev/FileTree.svelte";
+  import FileIcon from "../dev/FileIcon.svelte";
   import CodeEditor from "./CodeEditor.svelte";
   import Orchestrator from "./Orchestrator.svelte";
   import IssuesPanel from "./IssuesPanel.svelte";
@@ -32,15 +33,23 @@
   <aside class="explorer">
     <IssuesPanel />
     {#if dev.git?.changes?.length}
-      <div class="sec">Modifiche <span>{dev.git.changes.length}</span><button class="link" onclick={() => dev.showDiff()}>tutte</button></div>
+      <div class="sec">
+        <Icon name="layers" size={12} /> Modifiche <span class="pill warm">{dev.git.changes.length}</span>
+        <button class="link" onclick={() => dev.showDiff()}>vedi tutte</button>
+      </div>
       {#each dev.git.changes.slice(0, 50) as c (c.path)}
+        {@const nome = c.rel.split("/").pop() ?? c.rel}
+        {@const cart = c.rel.includes("/") ? c.rel.slice(0, c.rel.lastIndexOf("/")) : ""}
         <button class="chg" class:on={dev.diffFile === c.path && dev.tab === "diff"} onclick={() => apriCambiato(c.path)} title={c.rel}>
-          <em class="st-{c.status === '??' ? 'n' : c.status[0]}">{c.status === "??" ? "N" : c.status[0]}</em><span>{c.rel}</span>
+          <FileIcon name={nome} />
+          <span class="cn">{nome}</span>
+          {#if cart}<span class="cd">{cart}</span>{/if}
+          <em class="st st-{c.status === '??' ? 'n' : c.status[0]}">{c.status === "??" ? "N" : c.status[0]}</em>
         </button>
       {/each}
     {/if}
-    <div class="sec">Esplora</div>
-    {#if dev.folder}<FileTree path={dev.folder} onopen={(p) => studio.openFile(p)} />{/if}
+    <div class="sec"><Icon name="folder" size={12} /> {studio.project?.name ?? "Esplora"}</div>
+    {#if dev.folder}<FileTree path={dev.folder} onopen={(p) => studio.openFile(p)} active={dev.tab === "file" ? studio.active : null} />{/if}
   </aside>
 
   <section class="center">
@@ -115,70 +124,118 @@
   }
   .explorer {
     overflow: auto;
-    padding: 6px;
+    padding: 6px 6px 16px;
     border-right: 1px solid var(--rule-soft);
-    background: var(--paper-2);
+    background:
+      radial-gradient(260px 160px at 0% 0%, color-mix(in oklch, var(--accent) 7%, transparent), transparent 70%),
+      var(--paper-2);
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--accent) 25%, transparent) transparent;
   }
   .sec {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin: 10px 8px 4px;
-    font-size: 0.66rem;
+    margin: 12px 8px 4px;
+    font-size: var(--t-xs);
     font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--ink-3);
+    color: var(--ink-2);
   }
-  .sec span {
-    letter-spacing: 0;
+  .sec :global(svg) {
+    color: var(--accent);
+  }
+  .pill {
+    min-width: 18px;
+    height: 17px;
+    padding: 0 5px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    font-size: 0.62rem;
+    font-weight: 750;
+  }
+  .pill.warm {
+    color: oklch(0.5 0.13 70);
+    background: oklch(0.8 0.12 80 / 0.3);
   }
   .sec .link {
     margin-left: auto;
     font-size: 0.7rem;
-    text-transform: none;
-    letter-spacing: 0;
+    font-weight: 600;
   }
   .chg {
     width: 100%;
     display: flex;
-    gap: 7px;
+    gap: 6px;
     align-items: center;
-    height: 24px;
+    height: 26px;
     padding: 0 8px;
-    border-radius: 5px;
+    border-radius: 8px;
     font-size: var(--t-sm);
     text-align: left;
+    transition: background-color 0.12s;
   }
   .chg:hover {
-    background: var(--paper);
+    background: color-mix(in oklch, var(--accent) 7%, transparent);
   }
   .chg.on {
-    background: var(--accent-mist);
+    background: color-mix(in oklch, var(--accent) 15%, transparent);
   }
-  .chg span {
+  .cn {
+    flex: none;
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--ink);
+  }
+  .cd {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     direction: rtl;
     text-align: left;
+    font-size: var(--t-xs);
+    color: var(--ink-3);
   }
-  .chg em {
+  .st {
+    flex: none;
+    margin-left: auto;
+    width: 16px;
+    height: 16px;
+    border-radius: 5px;
+    display: grid;
+    place-items: center;
     font-style: normal;
-    font-size: 0.66rem;
-    font-weight: 700;
-    width: 10px;
+    font-size: 0.6rem;
+    font-weight: 800;
   }
   .st-M,
   .st-R {
-    color: oklch(0.6 0.13 70);
+    color: oklch(0.5 0.13 70);
+    background: oklch(0.8 0.12 80 / 0.3);
   }
   .st-A,
   .st-n {
-    color: var(--ok);
+    color: oklch(0.45 0.13 150);
+    background: oklch(0.78 0.13 150 / 0.28);
   }
   .st-D {
-    color: var(--danger);
+    color: oklch(0.5 0.17 25);
+    background: oklch(0.75 0.14 25 / 0.25);
+  }
+  :global([data-theme="dark"]) .pill.warm,
+  :global([data-theme="dark"]) .st-M {
+    color: oklch(0.85 0.12 80);
+  }
+  :global([data-theme="dark"]) .st-A,
+  :global([data-theme="dark"]) .st-n {
+    color: oklch(0.85 0.13 150);
+  }
+  :global([data-theme="dark"]) .st-D {
+    color: oklch(0.82 0.13 25);
   }
   .center {
     min-width: 0;

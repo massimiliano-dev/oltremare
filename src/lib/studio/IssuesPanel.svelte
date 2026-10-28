@@ -141,12 +141,13 @@
     align-items: center;
     gap: 6px;
     margin: 8px 8px 2px;
-    font-size: 0.66rem;
+    font-size: var(--t-xs);
     font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--ink-3);
+    color: var(--ink-2);
     text-align: left;
+  }
+  .sec :global(svg) {
+    color: var(--accent);
   }
   .key {
     padding: 1px 6px;
@@ -221,10 +222,11 @@
     display: flex;
     align-items: center;
     margin: 0 2px;
-    border-radius: 6px;
+    border-radius: 8px;
+    transition: background-color 0.12s;
   }
   .iss:hover {
-    background: var(--paper);
+    background: color-mix(in oklch, var(--accent) 7%, transparent);
   }
   .it {
     flex: 1;

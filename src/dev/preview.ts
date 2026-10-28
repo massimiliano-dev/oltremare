@@ -274,14 +274,24 @@ export function installPreview() {
           return ["/Users/demo/Sviluppo/negozio"];
         case "dev_open":
           return a.folder;
-        case "dev_tree":
-          return a.folder === "/Users/demo/Sviluppo/negozio"
-            ? [{ name: "src", path: "/Users/demo/Sviluppo/negozio/src", dir: true }, { name: "package.json", path: "/Users/demo/Sviluppo/negozio/package.json", dir: false }, { name: "README.md", path: "/Users/demo/Sviluppo/negozio/README.md", dir: false }]
-            : [{ name: "carrello.ts", path: a.folder + "/carrello.ts", dir: false }, { name: "api.ts", path: a.folder + "/api.ts", dir: false }];
+        case "dev_tree": {
+          const base = "/Users/demo/Sviluppo/negozio";
+          const T: Record<string, [string, boolean][]> = {
+            [base]: [["src", true], ["public", true], ["tests", true], ["docs", true], ["scripts", true], [".github", true], ["package.json", false], ["README.md", false], ["tsconfig.json", false], [".env.example", false], ["docker-compose.yml", false], ["pnpm-lock.yaml", false]],
+            [base + "/src"]: [["components", true], ["api", true], ["styles", true], ["app.svelte", false], ["carrello.ts", false], ["sconti.ts", false], ["main.ts", false]],
+            [base + "/src/components"]: [["Carrello.svelte", false], ["Prodotto.svelte", false], ["Bottone.tsx", false]],
+            [base + "/src/api"]: [["ordini.rs", false], ["schema.sql", false]],
+            [base + "/src/styles"]: [["tema.css", false], ["reset.scss", false]],
+            [base + "/public"]: [["logo.svg", false], ["copertina.png", false], ["index.html", false]],
+            [base + "/tests"]: [["carrello.test.ts", false]],
+          };
+          const key = (a.folder in T) ? a.folder : (a.folder.startsWith(base) ? a.folder : base);
+          return (T[key] ?? []).map(([name, dir]) => ({ name, path: `${key}/${name}`, dir }));
+        }
         case "dev_file":
           return { path: a.path, content: "export function totale(righe: Riga[]) {\n  return righe.reduce((s, r) => s + r.prezzo * r.qta, 0);\n}\n", binary: false, truncated: false, size: 120, ext: "ts" };
         case "dev_git":
-          return { repo: true, branch: "feature/NEG-12-sconti", last: "a1b2c3d Carrello: righe e totale", changes: [{ status: "M", path: "/Users/demo/Sviluppo/negozio/src/carrello.ts", rel: "src/carrello.ts" }, { status: "??", path: "/Users/demo/Sviluppo/negozio/src/sconti.ts", rel: "src/sconti.ts" }] };
+          return { repo: true, branch: "feature/NEG-12-sconti", last: "a1b2c3d Carrello: righe e totale", changes: [{ status: "M", path: "/Users/demo/Sviluppo/negozio/src/carrello.ts", rel: "src/carrello.ts" }, { status: "??", path: "/Users/demo/Sviluppo/negozio/src/sconti.ts", rel: "src/sconti.ts" }, { status: "M", path: "/Users/demo/Sviluppo/negozio/src/components/Carrello.svelte", rel: "src/components/Carrello.svelte" }, { status: "D", path: "/Users/demo/Sviluppo/negozio/src/vecchio.js", rel: "src/vecchio.js" }] };
         case "dev_diff":
           return "diff --git a/src/carrello.ts b/src/carrello.ts\n@@ -1,3 +1,5 @@\n export function totale(righe: Riga[]) {\n-  return righe.reduce((s, r) => s + r.prezzo * r.qta, 0);\n+  const lordo = righe.reduce((s, r) => s + r.prezzo * r.qta, 0);\n+  return applicaSconto(lordo);\n }";
         case "dev_session":
