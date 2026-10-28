@@ -33,7 +33,8 @@ class RunsState {
   listen() {
     on("run-started", ({ run }) => {
       this.byId[run.id] ??= run;
-      const mine = run.conversationId === this.conversationId || (this.expecting && this.conversationId === null);
+      // Solo esecuzioni dell'agente selezionato: un altro agente partito da solo non entra in questa chat
+      const mine = run.agentId === agents.selected?.id && (run.conversationId === this.conversationId || (this.expecting && this.conversationId === null));
       if (mine) this.adopt(run);
     });
     on("run-progress", (p) => (this.progress[p.runId] = p.text));
@@ -133,6 +134,16 @@ class RunsState {
     try {
       const list = await api.conversationRuns(id);
       if (this.conversationId !== id) return;
+      // La conversazione si apre sempre sotto il suo agente
+      const owner = list[0]?.agentId;
+      if (owner && owner !== agents.selected?.id && agents.byId(owner)) {
+        agents.selectedId = owner;
+        try {
+          localStorage.setItem("oltremare:agent", owner);
+        } catch {}
+        this.conversations = await api.conversations(owner).catch(() => []);
+        if (this.conversationId !== id) return;
+      }
       for (const r of list) {
         // Un'esecuzione in corso tiene i passi già arrivati in diretta
         if (!this.byId[r.id] || !ACTIVE.has(this.byId[r.id].status)) this.byId[r.id] = r;
@@ -150,6 +161,9 @@ class RunsState {
     const agent = agents.selected;
     if (!agent || (!text.trim() && !attachments.length) || this.sending) return false;
     this.sending = true;
+    // Una conversazione aperta di un altro agente non si continua: se ne inizia una nuova
+    const current = this.order.map((id) => this.byId[id]).find(Boolean);
+    if (this.conversationId && current && current.agentId !== agent.id) this.newConversation();
     const isNew = this.conversationId === null;
     this.expecting = isNew;
     try {

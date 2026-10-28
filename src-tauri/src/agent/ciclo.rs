@@ -187,7 +187,12 @@ pub fn avvia(app: &AppHandle, a: Avvio) -> Result<RunView> {
     let esistente = a.conversation_id.filter(|c| !c.is_empty());
     let (conv_id, mut messaggi) = match &esistente {
         Some(id) => {
-            let (_, m) = st.db.trascrizione(id)?;
+            let (proprietario, m) = st.db.trascrizione(id)?;
+            // Le conversazioni sono di un agente solo: mai continuarle con un altro
+            if proprietario != agent.id {
+                let nome = st.store.agent(&proprietario).map(|x| x.name).unwrap_or(proprietario);
+                return Err(AppError::msg(format!("Questa conversazione è di «{nome}»: aprila da quell'agente o iniziane una nuova")));
+            }
             (id.clone(), m)
         }
         None => (uuid::Uuid::new_v4().to_string(), vec![]),

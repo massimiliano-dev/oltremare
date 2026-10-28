@@ -27,8 +27,7 @@ class VoiceState {
     on("voice-error", (e) => ui.toast(e, "error", e.includes("Impostazioni") ? { label: "Apri", run: () => ui.openSettings("voice") } : undefined));
     on("voice-run", async ({ conversationId, agentId, runId }) => {
       // La richiesta a voce si vede nella chat
-      if (agents.selected?.id !== agentId) agents.select(agentId);
-      await runs.openConversation(conversationId);
+      await runs.openRun(agentId, conversationId);
       runs.selectedRunId = runId;
     });
     await this.refresh();

@@ -33,8 +33,7 @@
   }
 
   async function open(r: Run) {
-    if (agents.selected?.id !== r.agentId) agents.select(r.agentId);
-    await runs.openConversation(r.conversationId);
+    await runs.openRun(r.agentId, r.conversationId);
     runs.selectedRunId = r.id;
   }
 
