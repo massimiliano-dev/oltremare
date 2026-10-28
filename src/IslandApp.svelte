@@ -205,7 +205,8 @@
 
 <style>
   :global(html.island),
-  :global(html.island body) {
+  :global(html.island body),
+  :global(html.island #app) {
     background: transparent !important;
     overflow: hidden;
   }

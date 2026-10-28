@@ -84,7 +84,9 @@ class ThemeState {
       }
     })();
     w?.setTheme(this.mode === "system" ? null : r).catch(() => {});
-    w?.setBackgroundColor(r === "dark" ? [21, 19, 34, 255] : [249, 248, 255, 255]).catch(() => {});
+    // Solo la finestra principale ha uno sfondo: isola, compagno e palette restano trasparenti
+    const piccola = new URLSearchParams(location.search).has("view");
+    w?.setBackgroundColor(piccola ? [0, 0, 0, 0] : r === "dark" ? [21, 19, 34, 255] : [249, 248, 255, 255]).catch(() => {});
   }
 }
 

@@ -244,7 +244,8 @@
 
 <style>
   :global(html.palette),
-  :global(html.palette body) {
+  :global(html.palette body),
+  :global(html.palette #app) {
     background: transparent !important;
   }
   .wrap {
