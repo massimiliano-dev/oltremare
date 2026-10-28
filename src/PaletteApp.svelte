@@ -225,6 +225,7 @@
             <Icon name="shield" size={15} />
             <span><strong>{approval.title}</strong><small>{approval.summary}</small></span>
             <button class="btn btn-quiet" onclick={() => approval && api.approvalAnswer(approval.id, "deny")}>Nega</button>
+            <button class="btn btn-quiet" onclick={() => approval && api.approvalAnswer(approval.id, "allowAlways")} title="Non chiedere più per questa azione">Sempre</button>
             <button class="btn btn-primary" onclick={() => approval && api.approvalAnswer(approval.id, "allow")}>Consenti</button>
           </div>
         {/if}

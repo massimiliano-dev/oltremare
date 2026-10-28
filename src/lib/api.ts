@@ -315,7 +315,7 @@ export interface ApprovalRequest {
   allowSession: boolean;
 }
 
-export type Decision = "allow" | "allowSession" | "deny";
+export type Decision = "allow" | "allowSession" | "allowAlways" | "deny";
 
 export interface AuditEntry {
   at: number;

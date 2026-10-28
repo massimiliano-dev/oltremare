@@ -82,8 +82,11 @@
     <button class="btn btn-line" onclick={() => (askReason ? approvals.answer(request, "deny", reason) : approvals.answer(request, "deny"))}>
       Nega <kbd>esc</kbd>
     </button>
-    {#if request.allowSession}
-      <button class="btn btn-quiet" onclick={() => approvals.answer(request, "allowSession")}>Sempre in questa esecuzione <kbd>⇧↵</kbd></button>
+    <button class="btn btn-line" onclick={() => approvals.answer(request, "allowAlways")} title="Salva la regola «Consenti» per {request.agentName}: questa azione non chiederà più">
+      Consenti sempre <kbd>⌥↵</kbd>
+    </button>
+    {#if request.allowSession && !compact}
+      <button class="btn btn-quiet" onclick={() => approvals.answer(request, "allowSession")}>Solo per questa richiesta <kbd>⇧↵</kbd></button>
     {/if}
     {#if !askReason && !compact}
       <button class="link why" onclick={() => (askReason = true)}>Nega con un motivo</button>

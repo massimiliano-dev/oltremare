@@ -316,6 +316,7 @@ fn approval_answer(app: State<'_, App>, approval_id: String, decision: String, r
     let r = match decision.as_str() {
         "allow" => Risposta::Consenti,
         "allowSession" => Risposta::ConsentiSessione,
+        "allowAlways" => Risposta::ConsentiSempre,
         _ => Risposta::Nega(reason),
     };
     if app.approvazioni.rispondi(&approval_id, r) {

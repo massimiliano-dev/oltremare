@@ -187,6 +187,7 @@
           <small>{approval.summary}</small>
           <div class="btns">
             <button class="no" onclick={(e) => { e.stopPropagation(); api.approvalAnswer(approval.id, "deny"); }}>Nega</button>
+            <button class="no" onclick={(e) => { e.stopPropagation(); api.approvalAnswer(approval.id, "allowAlways"); }} title="Non chiedere più per questa azione">Sempre</button>
             <button class="yes" onclick={(e) => { e.stopPropagation(); api.approvalAnswer(approval.id, "allow"); }}>Consenti</button>
           </div>
         </div>

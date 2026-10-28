@@ -170,6 +170,7 @@ pub async fn chiama(ctx: &ContestoRun, nome: &str, input: Value, toolset: Option
         let decisione_ui = match &risposta {
             Risposta::Consenti => "allow",
             Risposta::ConsentiSessione => "allowSession",
+            Risposta::ConsentiSempre => "allowAlways",
             Risposta::Nega(_) => "deny",
         };
         let _ = ctx.app.emit("run-approval-resolved", json!({ "approvalId": approval_id, "runId": ctx.run_id, "decision": decisione_ui, "by": chi }));
@@ -190,6 +191,17 @@ pub async fn chiama(ctx: &ContestoRun, nome: &str, input: Value, toolset: Option
             }
             Risposta::ConsentiSessione => {
                 ctx.consentiti.lock().unwrap_or_else(|e| e.into_inner()).insert(nome.to_string());
+            }
+            Risposta::ConsentiSempre => {
+                ctx.consentiti.lock().unwrap_or_else(|e| e.into_inner()).insert(nome.to_string());
+                // La regola si salva nell'agente: da ora questo strumento non chiede più
+                if let Ok(mut a) = st.store.agent(&ctx.agent.id) {
+                    a.policy.per_tool.insert(spec.nome.to_string(), "allow".to_string());
+                    a.updated_at = now_ms();
+                    if st.store.save_agent(&a).is_ok() {
+                        let _ = ctx.app.emit("agents-changed", ());
+                    }
+                }
             }
             Risposta::Consenti => {}
         }

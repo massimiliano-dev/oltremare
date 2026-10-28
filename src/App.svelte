@@ -66,6 +66,11 @@
     // Approvazioni prima di tutto, se non si sta scrivendo
     const req = approvals.current;
     if (req && !overlay && !typing(e)) {
+      if (e.key === "Enter" && e.altKey) {
+        e.preventDefault();
+        approvals.answer(req, "allowAlways");
+        return;
+      }
       if (e.key === "Enter" && e.shiftKey && req.allowSession) {
         e.preventDefault();
         approvals.answer(req, "allowSession");

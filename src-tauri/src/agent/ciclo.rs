@@ -157,6 +157,9 @@ fn sistema(agent: &Agent, s: &Settings, istruzioni_server: &[(String, String)]) 
         p.push_str(&format!("- Cartelle in cui puoi lavorare: {}. Usa percorsi completi (es. ~/Documents/file.txt).\n", elenco.join(", ")));
         p.push_str("- Alcune azioni richiedono l'approvazione dell'utente: se le nega, non riprovare la stessa azione e chiedi come preferisce procedere.\n");
         p.push_str("- Prima di modificare o spostare file, guarda cosa c'è. Non cancellare mai: al massimo sposta nel Cestino.\n");
+        if strumenti.iter().any(|t| t.categoria == "browser") {
+            p.push_str("- Per aprire e navigare siti usa gli strumenti web_* (il browser degli agenti, con un profilo separato), non il Chrome o il Safari dell'utente.\n");
+        }
         p.push_str("- Alla fine riassumi in poche righe cosa hai fatto.\n");
         if strumenti.iter().any(|t| t.categoria == "web") {
             p.push_str("- Puoi cercare sul web. Se non sai qualcosa con certezza, o se l'informazione può essere cambiata dopo il tuo addestramento (notizie, prezzi, orari, versioni di software, persone, aziende, leggi, eventi), cerca prima di rispondere invece di tirare a indovinare; leggi le pagine più affidabili e cita le fonti con i link. Per conoscenze stabili rispondi direttamente.\n");

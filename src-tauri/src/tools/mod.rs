@@ -273,7 +273,8 @@ Per montaggi più complessi usa FFmpeg con esegui_comando.",
         nome: "automazione_app", etichetta: "Comandare le app (AppleScript)", categoria: "apps", rischio: Rischio::Danger, parallelo: false, input_grande: true,
         descrizione: "Comanda le app del Mac senza usare mouse e schermo, in background: AppleScript o JavaScript for Automation (osascript). \
 Funziona con Note, Promemoria, Calendario, Mail, Finder, Safari, Numbers, Pages, Keynote, Excel, Word, Musica e molte altre. \
-Preferiscilo al controllo dello schermo. Non usare «System Events» per digitare tasti: interferisce con l'utente.",
+Preferiscilo al controllo dello schermo. Non usare «System Events» per digitare tasti: interferisce con l'utente. \
+Per aprire e navigare siti web non comandare Chrome o Safari dell'utente: usa gli strumenti web_* (il browser degli agenti).",
         schema: || obj(&[("script", s("Lo script")), ("linguaggio", e("Linguaggio dello script", &["applescript", "javascript"]))], &["script"]),
     },
     ToolSpec {

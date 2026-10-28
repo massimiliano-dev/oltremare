@@ -9,6 +9,8 @@ use tokio::sync::oneshot;
 pub enum Risposta {
     Consenti,
     ConsentiSessione,
+    /// Consenti e ricorda: la regola dell'agente per questo strumento diventa «Consenti»
+    ConsentiSempre,
     Nega(Option<String>),
 }
 
