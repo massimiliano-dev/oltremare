@@ -487,6 +487,15 @@ fn autostart_set(handle: AppHandle, enabled: bool) -> Result<()> {
     finestre::imposta_avvio(&handle, enabled).map_err(AppError::msg)
 }
 
+/// Utilizzo dei provider (ultimi 30 giorni) e stato dei limiti dell'abbonamento.
+#[tauri::command]
+fn usage_stats(app: State<'_, App>) -> Result<Value> {
+    let oggi = chrono::Local::now().date_naive().and_hms_opt(0, 0, 0).and_then(|d| d.and_local_timezone(chrono::Local).single()).map(|d| d.timestamp_millis()).unwrap_or_else(now_ms);
+    let mut v = app.db.utilizzo(oggi, 30)?;
+    v["subscription"] = app.store.pref("abbonamento:limiti").unwrap_or(Value::Null);
+    Ok(v)
+}
+
 #[tauri::command]
 fn cron_preview(expr: String) -> Result<Vec<i64>> {
     triggers::prossime(&expr, 3).map_err(AppError::msg)
@@ -963,6 +972,7 @@ pub fn run() {
             briefing_now,
             briefing_latest,
             cron_preview,
+            usage_stats,
             hotkey_check,
             palette_toggle,
             palette_hide,

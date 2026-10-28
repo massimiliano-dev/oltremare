@@ -41,6 +41,7 @@
   --ink-3: oklch(0.58 0.045 var(--tint-h));
 
   --accent: oklch(0.48 var(--accent-c) var(--accent-h));
+  --chart-1: #4446cb;
   --accent-hi: oklch(0.55 calc(var(--accent-c) * 0.95) var(--accent-h));
   --accent-deep: oklch(0.32 0.16 var(--accent-h));
   --accent-night: oklch(0.25 0.12 var(--accent-h));
@@ -89,6 +90,7 @@
   --ink-3: oklch(0.63 0.04 var(--tint-h));
 
   --accent: oklch(0.7 0.16 var(--accent-h));
+  --chart-1: #7584f5;
   --accent-hi: oklch(0.76 0.14 var(--accent-h));
   --accent-deep: oklch(0.42 0.16 var(--accent-h));
   --accent-night: oklch(0.13 0.05 var(--accent-h));

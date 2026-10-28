@@ -72,6 +72,14 @@ const MIGRAZIONI: &[&str] = &[
      );
      CREATE INDEX notifiche_ts ON notifiche(ts DESC);
      CREATE TABLE stato_fonti (chiave TEXT PRIMARY KEY, valore TEXT NOT NULL);",
+    // 4: il provider di ogni esecuzione, per le statistiche di utilizzo (le vecchie si ricavano dal modello)
+    "ALTER TABLE esecuzioni ADD COLUMN provider TEXT;
+     UPDATE esecuzioni SET provider = CASE
+        WHEN modello_servito LIKE 'claude%' AND costo IS NOT NULL THEN 'anthropic'
+        WHEN modello_servito LIKE 'claude%' THEN 'claude-code'
+        WHEN modello_servito LIKE 'gpt%' THEN 'openai'
+        WHEN modello_servito IS NULL THEN NULL
+        ELSE 'local' END;",
 ];
 
 #[derive(Serialize)]
@@ -255,13 +263,67 @@ impl Db {
 
     // ---------- Esecuzioni ----------
 
-    pub fn crea_run(&self, r: &RunView) -> Result<()> {
+    pub fn crea_run(&self, r: &RunView, provider: &str) -> Result<()> {
         self.conn().execute(
-            "INSERT INTO esecuzioni (id, conversazione_id, agent_id, titolo, sorgente, stato, inizio)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![r.id, r.conversation_id, r.agent_id, r.title, r.trigger, r.status, r.started_at],
+            "INSERT INTO esecuzioni (id, conversazione_id, agent_id, titolo, sorgente, stato, inizio, provider)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![r.id, r.conversation_id, r.agent_id, r.title, r.trigger, r.status, r.started_at, provider],
         )?;
         Ok(())
+    }
+
+    /// Utilizzo per provider: totali per oggi, 7 e 30 giorni, serie giornaliera, modelli e agenti.
+    pub fn utilizzo(&self, da_oggi: i64, giorni: i64) -> Result<serde_json::Value> {
+        use serde_json::json;
+        let conn = self.conn();
+        let inizio = da_oggi - (giorni - 1) * 86_400_000;
+        let mut st = conn.prepare(
+            "SELECT COALESCE(provider, ''), agent_id, COALESCE(modello_servito, ''), inizio,
+                    COALESCE(json_extract(usage, '$.inputTokens'), 0) + COALESCE(json_extract(usage, '$.cacheRead'), 0) + COALESCE(json_extract(usage, '$.cacheWrite'), 0),
+                    COALESCE(json_extract(usage, '$.outputTokens'), 0),
+                    COALESCE(json_extract(usage, '$.webSearch'), 0),
+                    COALESCE(costo, 0), COALESCE(json_extract(usage, '$.valore'), 0)
+             FROM esecuzioni WHERE inizio >= ?1 AND usage IS NOT NULL",
+        )?;
+        let righe = st.query_map([inizio], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, i64>(3)?, r.get::<_, i64>(4)?, r.get::<_, i64>(5)?, r.get::<_, i64>(6)?, r.get::<_, f64>(7)?, r.get::<_, f64>(8)?))
+        })?;
+        let mut per: std::collections::BTreeMap<String, serde_json::Value> = Default::default();
+        for r in righe.flatten() {
+            let (prov, agente, modello, quando, ingresso, uscita, ricerche, costo, valore) = r;
+            if prov.is_empty() {
+                continue;
+            }
+            let e = per.entry(prov).or_insert_with(|| {
+                json!({ "today": {}, "week": {}, "month": {}, "daily": vec![json!({ "runs": 0, "tokens": 0, "cost": 0.0, "value": 0.0 }); giorni as usize], "models": {}, "agents": {} })
+            });
+            let aggiungi = |t: &mut serde_json::Value| {
+                t["runs"] = json!(t["runs"].as_i64().unwrap_or(0) + 1);
+                t["input"] = json!(t["input"].as_i64().unwrap_or(0) + ingresso);
+                t["output"] = json!(t["output"].as_i64().unwrap_or(0) + uscita);
+                t["searches"] = json!(t["searches"].as_i64().unwrap_or(0) + ricerche);
+                t["cost"] = json!(t["cost"].as_f64().unwrap_or(0.0) + costo);
+                t["value"] = json!(t["value"].as_f64().unwrap_or(0.0) + valore);
+            };
+            if quando >= da_oggi {
+                aggiungi(&mut e["today"]);
+            }
+            if quando >= da_oggi - 6 * 86_400_000 {
+                aggiungi(&mut e["week"]);
+            }
+            aggiungi(&mut e["month"]);
+            let i = ((quando - inizio) / 86_400_000).clamp(0, giorni - 1) as usize;
+            let d = &mut e["daily"][i];
+            d["runs"] = json!(d["runs"].as_i64().unwrap_or(0) + 1);
+            d["tokens"] = json!(d["tokens"].as_i64().unwrap_or(0) + ingresso + uscita);
+            d["cost"] = json!(d["cost"].as_f64().unwrap_or(0.0) + costo);
+            d["value"] = json!(d["value"].as_f64().unwrap_or(0.0) + valore);
+            if !modello.is_empty() {
+                aggiungi(&mut e["models"][modello.as_str()]);
+            }
+            aggiungi(&mut e["agents"][agente.as_str()]);
+        }
+        Ok(json!({ "since": inizio, "days": giorni, "providers": per }))
     }
 
     pub fn chiudi_run(
@@ -354,5 +416,20 @@ impl Db {
         ))?;
         let rows = st.query_map(params![agent_id, limite, offset], Self::leggi_run)?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
+    }
+}
+
+#[cfg(test)]
+mod prova_utilizzo {
+    #[test]
+    #[ignore]
+    fn utilizzo_su_copia() {
+        let p = std::path::PathBuf::from(std::env::var("DB_COPIA").unwrap());
+        let db = super::Db::open(&p).unwrap();
+        let oggi = chrono::Local::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_local_timezone(chrono::Local).unwrap().timestamp_millis();
+        let v = db.utilizzo(oggi, 30).unwrap();
+        for (k, p) in v["providers"].as_object().unwrap() {
+            println!("{k}: oggi {} · 7g {} · 30g {} · modelli {:?}", p["today"], p["week"], p["month"], p["models"].as_object().map(|m| m.keys().collect::<Vec<_>>()));
+        }
     }
 }

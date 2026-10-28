@@ -175,7 +175,7 @@ pub(super) struct Stato {
     json_parziale: Vec<String>,
     stop: Option<String>,
     stop_details: Option<Value>,
-    usage: Usage,
+    pub(super) usage: Usage,
     modello: String,
 }
 

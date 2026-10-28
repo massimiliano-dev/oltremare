@@ -23,6 +23,12 @@ Al primo avvio apri **Impostazioni → Provider** (`⌘,`) e scegli come parlare
 
 Se non c'è nessuna chiave API ma Claude Code è collegato, gli agenti passano da soli all'abbonamento.
 
+In **Impostazioni → Provider → Utilizzo** vedi quanto usi ogni provider:
+- richieste, token ed eventuali ricerche web, oggi, in 7 e in 30 giorni;
+- il costo stimato per Claude con chiave e per GPT;
+- con l'abbonamento, lo stato della finestra di utilizzo del piano, quando si azzera e il valore equivalente in API;
+- un grafico giornaliero e le ripartizioni per agente e per modello.
+
 ## Cosa fa
 
 ### Agenti

@@ -50,7 +50,7 @@ pub fn stima(model: &str, u: &Usage) -> Option<f64> {
 mod tests {
     #[test]
     fn opus_5_5_price() {
-        let u = crate::providers::Usage { input_tokens: 1_000_000, output_tokens: 1_000_000, cache_read: 0, cache_write: 0, web_search: 0 };
+        let u = crate::providers::Usage { input_tokens: 1_000_000, output_tokens: 1_000_000, cache_read: 0, cache_write: 0, web_search: 0, valore: 0.0 };
         assert!((super::stima("claude-opus-5-5", &u).unwrap() - 24.0).abs() < 1e-9);
         assert!(super::stima("gpt-5", &u).is_none());
     }

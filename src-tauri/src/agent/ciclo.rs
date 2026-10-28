@@ -259,7 +259,7 @@ pub fn avvia(app: &AppHandle, a: Avvio) -> Result<RunView> {
         served_model: None,
     };
     let preparato: Result<()> = (|| {
-        st.db.crea_run(&run)?;
+        st.db.crea_run(&run, &agent.provider)?;
         st.db.salva_passo(&run_id, 0, &passo_utente)?;
         // L'ora corrente va nel messaggio, non nel prompt di sistema: così la cache resta valida
         let ora = chrono::Local::now().format("%H:%M");

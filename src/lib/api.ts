@@ -140,6 +140,31 @@ export interface Settings {
   computerWaitIdle: boolean;
 }
 
+export interface UsageTotals {
+  runs?: number;
+  input?: number;
+  output?: number;
+  searches?: number;
+  cost?: number;
+  value?: number;
+}
+
+export interface UsageProvider {
+  today: UsageTotals;
+  week: UsageTotals;
+  month: UsageTotals;
+  daily: { runs: number; tokens: number; cost: number; value: number }[];
+  models: Record<string, UsageTotals>;
+  agents: Record<string, UsageTotals>;
+}
+
+export interface UsageStats {
+  since: number;
+  days: number;
+  providers: Partial<Record<Provider, UsageProvider>>;
+  subscription: { status?: string; resetsAt?: number; rateLimitType?: string; overageStatus?: string; overageDisabledReason?: string; isUsingOverage?: boolean; at?: number } | null;
+}
+
 export interface DevEntry {
   name: string;
   path: string;
@@ -471,6 +496,7 @@ export const api = {
   slackTokenSet: (token: string) => invoke<string>("slack_token_set", { token }),
   briefingNow: () => invoke<Run>("briefing_now"),
   briefingLatest: () => invoke<BriefingInfo | null>("briefing_latest"),
+  usageStats: () => invoke<UsageStats>("usage_stats"),
   cronPreview: (expr: string) => invoke<number[]>("cron_preview", { expr }),
   hotkeyCheck: (accelerator: string, agentId?: string) => invoke<string | null>("hotkey_check", { accelerator, agentId }),
   paletteOpenRun: (runId: string, conversationId: string, agentId: string) => invoke<void>("palette_open_run", { runId, conversationId, agentId }),

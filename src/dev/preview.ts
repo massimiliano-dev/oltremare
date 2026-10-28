@@ -228,6 +228,18 @@ export function installPreview() {
           return [now + 3600_000, now + 86400_000, now + 2 * 86400_000];
         case "hotkey_check":
           return null;
+        case "usage_stats": {
+          const daily = Array.from({ length: 30 }, (_, i) => ({ runs: i % 4, tokens: (i % 7) * 42000 + (i > 24 ? 160000 : 0), cost: 0, value: (i % 7) * 0.4 }));
+          const dailyApi = Array.from({ length: 30 }, (_, i) => ({ runs: i % 3, tokens: (i % 5) * 9000, cost: (i % 5) * 0.11, value: 0 }));
+          return {
+            since: now - 29 * 86400_000, days: 30,
+            subscription: { status: "allowed", resetsAt: Math.floor(now / 1000) + 7200, rateLimitType: "five_hour", overageStatus: "rejected", isUsingOverage: false },
+            providers: {
+              "claude-code": { today: { runs: 42, input: 3029143, output: 47408, value: 18.4 }, week: { runs: 120, input: 8100000, output: 140000, value: 51.2 }, month: { runs: 260, input: 17000000, output: 310000, value: 112.7 }, daily, models: { "claude-opus-5": { runs: 240 }, "claude-sonnet-5": { runs: 20 } }, agents: { assistente: { runs: 150, input: 9000000 }, ricercatore: { runs: 80, input: 6000000 } } },
+              openai: { today: { runs: 3, input: 21000, output: 4000, cost: 0.34 }, week: { runs: 18, input: 120000, output: 30000, cost: 2.1 }, month: { runs: 50, input: 400000, output: 90000, cost: 6.8 }, daily: dailyApi, models: { "gpt-5": { runs: 50, cost: 6.8 } }, agents: { ricercatore: { runs: 50, cost: 6.8 } } },
+            },
+          };
+        }
         case "island_info":
           return { present: true, width: 186, height: 32 };
         case "dev_projects":

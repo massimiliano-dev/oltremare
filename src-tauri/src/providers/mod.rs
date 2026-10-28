@@ -51,6 +51,9 @@ pub struct Usage {
     /// Ricerche web lato server (Claude), pagate a parte
     #[serde(default)]
     pub web_search: u64,
+    /// Valore equivalente in dollari dichiarato da Claude Code (con l'abbonamento non si paga a richiesta)
+    #[serde(default)]
+    pub valore: f64,
 }
 
 impl Usage {
@@ -60,6 +63,7 @@ impl Usage {
         self.cache_read += o.cache_read;
         self.cache_write += o.cache_write;
         self.web_search += o.web_search;
+        self.valore += o.valore;
     }
 }
 

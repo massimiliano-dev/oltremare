@@ -214,8 +214,21 @@ pub async fn stream(c: Chiamata<'_>, on: &mut (dyn FnMut(Delta) + Send), cancel:
             }
             "rate_limit_event" => {
                 sblocco = v["rate_limit_info"]["resetsAt"].as_i64();
+                // Stato dei limiti del piano, per Impostazioni → Provider
+                if let Some(app) = crate::APP.get() {
+                    use tauri::Manager;
+                    let mut info = v["rate_limit_info"].clone();
+                    info["at"] = json!(crate::store::now_ms());
+                    let _ = app.state::<crate::App>().store.set_pref("abbonamento:limiti", info);
+                }
             }
             "result" => {
+                if let Some(c) = v["total_cost_usd"].as_f64() {
+                    st.usage.valore = c;
+                }
+                if let Some(w) = v["usage"]["server_tool_use"]["web_search_requests"].as_u64() {
+                    st.usage.web_search = w;
+                }
                 esito = Some(if v["is_error"].as_bool().unwrap_or(false) {
                     Err(v["result"].as_str().or(v["subtype"].as_str()).unwrap_or("errore sconosciuto").to_string())
                 } else {

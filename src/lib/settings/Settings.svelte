@@ -11,6 +11,7 @@
   import NotificationsTab from "./NotificationsTab.svelte";
   import ToolsTab from "./ToolsTab.svelte";
   import AppearanceTab from "./AppearanceTab.svelte";
+  import UsagePanel from "./UsagePanel.svelte";
   import { ui, type SettingsTab } from "../state/ui.svelte";
   import { STATE_LABEL } from "../state/avatar.svelte";
   import { fadeOut, sheet } from "../motion";
@@ -135,6 +136,10 @@
       </section>
     {:else if ui.settingsTab === "providers"}
       {@const cc = settings.claudeCode}
+      <section>
+        <h3>Utilizzo</h3>
+        <UsagePanel />
+      </section>
       <section>
         <div class="prov-head">
           <h3>Claude con il tuo abbonamento</h3>
