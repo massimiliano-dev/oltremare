@@ -6,6 +6,7 @@ mod db;
 mod dev;
 mod error;
 mod finestre;
+mod git;
 mod isola;
 mod mcp;
 mod mcp_client;
@@ -967,6 +968,18 @@ pub fn run() {
             studio::studio_issues,
             studio::studio_issue,
             studio::studio_commands,
+            git::git_state,
+            git::git_diff,
+            git::git_stage,
+            git::git_unstage,
+            git::git_discard,
+            git::git_commit,
+            git::git_sync,
+            git::git_branches,
+            git::git_checkout,
+            git::git_stash,
+            git::git_log,
+            git::git_suggest_message,
             studio::studio_launch,
             studio::studio_stop,
             dev::dev_open,

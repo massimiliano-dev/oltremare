@@ -9,6 +9,7 @@
   import UsagePanel from "./lib/settings/UsagePanel.svelte";
   import { studio } from "./lib/state/studio.svelte";
   import { dev } from "./lib/state/dev.svelte";
+  import { git } from "./lib/state/git.svelte";
   import { settings } from "./lib/state/settings.svelte";
   import { ui } from "./lib/state/ui.svelte";
   import { on } from "./lib/events";
@@ -59,7 +60,12 @@
           </div>
         {/if}
       </div>
-      {#if dev.git?.repo}<span class="branch" data-tauri-drag-region><Icon name="layers" size={12} /> {dev.git.branch}</span>{/if}
+      {#if git.state?.repo}
+        <span class="branch" data-tauri-drag-region title={git.state.upstream ? `Remoto: ${git.state.upstream}` : "Nessun ramo remoto"}>
+          <Icon name="branch" size={12} /> {git.state.branch}
+          {#if git.state.ahead}<span class="ab">↑{git.state.ahead}</span>{/if}{#if git.state.behind}<span class="ab">↓{git.state.behind}</span>{/if}
+        </span>
+      {/if}
     {/if}
     <span class="sp" data-tauri-drag-region></span>
     {#if studio.project}<RunBar />{/if}
@@ -189,6 +195,13 @@
     gap: 4px;
     font-size: var(--t-xs);
     color: var(--accent);
+  }
+  .ab {
+    padding: 0 5px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    background: color-mix(in oklch, var(--accent) 12%, transparent);
   }
   .sp {
     flex: 1;

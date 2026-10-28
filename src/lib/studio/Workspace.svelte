@@ -2,52 +2,25 @@
   // Lo spazio di lavoro dello Studio: esplora file, editor a schede, differenze, anteprima, processi, orchestratore.
   import Icon from "../Icon.svelte";
   import FileTree from "../dev/FileTree.svelte";
-  import FileIcon from "../dev/FileIcon.svelte";
   import CodeEditor from "./CodeEditor.svelte";
   import Orchestrator from "./Orchestrator.svelte";
   import IssuesPanel from "./IssuesPanel.svelte";
+  import SourceControl from "./SourceControl.svelte";
+  import DiffViewer from "./DiffViewer.svelte";
+  import { git } from "../state/git.svelte";
   import { dev } from "../state/dev.svelte";
   import { studio } from "../state/studio.svelte";
 
   let { prompt = "" }: { prompt?: string } = $props();
   let frame: HTMLIFrameElement | undefined = $state();
   let bottomOpen = $state(true);
-  const diffLines = $derived(dev.diff.split("\n"));
   const proc = $derived(dev.processes.find((p) => p.id === dev.bottom) ?? dev.processes[0] ?? null);
-
-  function diffClass(l: string) {
-    if (l.startsWith("+++") || l.startsWith("---") || l.startsWith("diff ") || l.startsWith("index ")) return "meta";
-    if (l.startsWith("@@")) return "hunk";
-    if (l.startsWith("+")) return "add";
-    if (l.startsWith("-")) return "del";
-    return "";
-  }
-
-  function apriCambiato(path: string) {
-    studio.openFile(path);
-    dev.showDiff(path);
-  }
 </script>
 
 <div class="ws">
   <aside class="explorer">
     <IssuesPanel />
-    {#if dev.git?.changes?.length}
-      <div class="sec">
-        <Icon name="layers" size={12} /> Modifiche <span class="pill warm">{dev.git.changes.length}</span>
-        <button class="link" onclick={() => dev.showDiff()}>vedi tutte</button>
-      </div>
-      {#each dev.git.changes.slice(0, 50) as c (c.path)}
-        {@const nome = c.rel.split("/").pop() ?? c.rel}
-        {@const cart = c.rel.includes("/") ? c.rel.slice(0, c.rel.lastIndexOf("/")) : ""}
-        <button class="chg" class:on={dev.diffFile === c.path && dev.tab === "diff"} onclick={() => apriCambiato(c.path)} title={c.rel}>
-          <FileIcon name={nome} />
-          <span class="cn">{nome}</span>
-          {#if cart}<span class="cd">{cart}</span>{/if}
-          <em class="st st-{c.status === '??' ? 'n' : c.status[0]}">{c.status === "??" ? "N" : c.status[0]}</em>
-        </button>
-      {/each}
-    {/if}
+    <SourceControl />
     <div class="sec"><Icon name="folder" size={12} /> {studio.project?.name ?? "Esplora"}</div>
     {#if dev.folder}<FileTree path={dev.folder} onopen={(p) => studio.openFile(p)} active={dev.tab === "file" ? studio.active : null} />{/if}
   </aside>
@@ -60,7 +33,7 @@
           <button class="tx" onclick={() => studio.closeFile(f.path)} aria-label="Chiudi {f.name}"><Icon name="x" size={11} /></button>
         </div>
       {/each}
-      <div class="tab" class:on={dev.tab === "diff"}><button class="tname" onclick={() => dev.showDiff(dev.diffFile ?? undefined)}><Icon name="layers" size={12} /> Differenze</button></div>
+      <div class="tab" class:on={dev.tab === "diff"}><button class="tname" onclick={() => git.showDiff(git.diffFile, git.diffStaged)}><Icon name="layers" size={12} /> Differenze{#if git.changed.length + git.staged.length}<span class="tcount">{git.changed.length + git.staged.length}</span>{/if}</button></div>
       <div class="tab" class:on={dev.tab === "preview"}><button class="tname" onclick={() => (dev.tab = "preview")}><Icon name="globe" size={12} /> Anteprima{dev.urls.length ? ` · ${dev.urls.length}` : ""}</button></div>
     </div>
     <div class="pane">
@@ -76,15 +49,11 @@
         {:else}
           <div class="welcome">
             <Icon name="draft" size={26} />
-            <p>Apri un file dall'esplora risorse, oppure chiedi all'orchestratore cosa fare. I file modificati da Claude compaiono in «Modifiche».</p>
+            <p>Apri un file dall'esplora risorse, oppure chiedi all'orchestratore cosa fare. I file modificati da Claude compaiono in «Modifiche», pronti per il commit.</p>
           </div>
         {/if}
       {:else if dev.tab === "diff"}
-        {#if !dev.diff.trim()}
-          <p class="hint">Nessuna differenza rispetto all'ultimo commit.</p>
-        {:else}
-          <pre class="code"><code>{#each diffLines as l, i (i)}<span class="dl {diffClass(l)}">{l || " "}</span>{"\n"}{/each}</code></pre>
-        {/if}
+        <DiffViewer />
       {:else}
         {#if dev.urls.length}
           <div class="urlbar">
@@ -144,98 +113,17 @@
   .sec :global(svg) {
     color: var(--accent);
   }
-  .pill {
-    min-width: 18px;
-    height: 17px;
+  .tcount {
+    min-width: 17px;
+    height: 16px;
     padding: 0 5px;
     border-radius: 999px;
     display: grid;
     place-items: center;
     font-size: 0.62rem;
     font-weight: 750;
-  }
-  .pill.warm {
-    color: oklch(0.5 0.13 70);
+    color: var(--warn-ink);
     background: oklch(0.8 0.12 80 / 0.3);
-  }
-  .sec .link {
-    margin-left: auto;
-    font-size: 0.7rem;
-    font-weight: 600;
-  }
-  .chg {
-    width: 100%;
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    height: 26px;
-    padding: 0 8px;
-    border-radius: 8px;
-    font-size: var(--t-sm);
-    text-align: left;
-    transition: background-color 0.12s;
-  }
-  .chg:hover {
-    background: color-mix(in oklch, var(--accent) 7%, transparent);
-  }
-  .chg.on {
-    background: color-mix(in oklch, var(--accent) 15%, transparent);
-  }
-  .cn {
-    flex: none;
-    max-width: 60%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--ink);
-  }
-  .cd {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    direction: rtl;
-    text-align: left;
-    font-size: var(--t-xs);
-    color: var(--ink-3);
-  }
-  .st {
-    flex: none;
-    margin-left: auto;
-    width: 16px;
-    height: 16px;
-    border-radius: 5px;
-    display: grid;
-    place-items: center;
-    font-style: normal;
-    font-size: 0.6rem;
-    font-weight: 800;
-  }
-  .st-M,
-  .st-R {
-    color: oklch(0.5 0.13 70);
-    background: oklch(0.8 0.12 80 / 0.3);
-  }
-  .st-A,
-  .st-n {
-    color: oklch(0.45 0.13 150);
-    background: oklch(0.78 0.13 150 / 0.28);
-  }
-  .st-D {
-    color: oklch(0.5 0.17 25);
-    background: oklch(0.75 0.14 25 / 0.25);
-  }
-  :global([data-theme="dark"]) .pill.warm,
-  :global([data-theme="dark"]) .st-M {
-    color: oklch(0.85 0.12 80);
-  }
-  :global([data-theme="dark"]) .st-A,
-  :global([data-theme="dark"]) .st-n {
-    color: oklch(0.85 0.13 150);
-  }
-  :global([data-theme="dark"]) .st-D {
-    color: oklch(0.82 0.13 25);
   }
   .center {
     min-width: 0;
@@ -312,32 +200,6 @@
     padding: 18px;
     color: var(--ink-3);
     font-size: var(--t-sm);
-  }
-  .code {
-    margin: 0;
-    padding: 10px 0;
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    font-size: 12.5px;
-    line-height: 1.55;
-    white-space: pre;
-  }
-  .dl {
-    display: inline-block;
-    min-width: 100%;
-    padding: 0 12px;
-  }
-  .dl.add {
-    background: oklch(0.6 0.14 150 / 0.14);
-  }
-  .dl.del {
-    background: oklch(0.6 0.18 25 / 0.14);
-  }
-  .dl.hunk {
-    color: var(--accent);
-  }
-  .dl.meta {
-    color: var(--ink-3);
-    font-weight: 600;
   }
   .urlbar {
     display: flex;

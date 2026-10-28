@@ -1,6 +1,7 @@
 // Oltremare Studio: progetti, file aperti nell'editor, orchestratore (modello, piano, AI scelta).
 import { api, errorText, type ClaudexInfo, type StudioDecision, type StudioProject } from "../api";
 import { dev } from "./dev.svelte";
+import { git } from "./git.svelte";
 import { ui } from "./ui.svelte";
 
 const PIN = "oltremare:studio-pin";
@@ -86,11 +87,13 @@ class StudioState {
     this.tasks = [];
     await dev.open(proj.path);
     dev.start();
+    git.start(proj.path);
     document.title = `${proj.name} · Oltremare Studio`;
   }
 
   close() {
     dev.stop();
+    git.stop();
     this.project = null;
     this.files = [];
     this.tasks = [];

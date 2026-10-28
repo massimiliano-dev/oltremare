@@ -194,6 +194,25 @@ export interface ClaudexInfo {
   profiles: { name: string; provider: string; model: string }[];
 }
 
+export interface GitFile {
+  rel: string;
+  path: string;
+  status: string;
+  from?: string | null;
+}
+
+export interface GitState {
+  repo: boolean;
+  branch?: string;
+  upstream?: string;
+  ahead?: number;
+  behind?: number;
+  staged?: GitFile[];
+  changed?: GitFile[];
+  stash?: number;
+  last?: string;
+}
+
 export interface DevEntry {
   name: string;
   path: string;
@@ -559,6 +578,18 @@ export const api = {
   studioLinkSet: (project: string, server: string, key: string, name: string) => invoke<void>("studio_link_set", { project, server, key, name }),
   studioLinkSuggest: (project: string, server: string) => invoke<{ key: string; name: string }[]>("studio_link_suggest", { project, server }),
   studioIssues: (project: string) => invoke<{ issues: { key: string; title: string; status: string; extra: string | null }[] }>("studio_issues", { project }),
+  gitState: (project: string) => invoke<GitState>("git_state", { project }),
+  gitDiff: (project: string, staged: boolean, file?: string) => invoke<string>("git_diff", { project, file, staged }),
+  gitStage: (project: string, files: string[]) => invoke<void>("git_stage", { project, files }),
+  gitUnstage: (project: string, files: string[]) => invoke<void>("git_unstage", { project, files }),
+  gitDiscard: (project: string, files: string[]) => invoke<void>("git_discard", { project, files }),
+  gitCommit: (project: string, message: string, opts: { amend?: boolean; all?: boolean } = {}) => invoke<string>("git_commit", { project, message, amend: opts.amend, all: opts.all }),
+  gitSync: (project: string, action: "pull" | "push" | "fetch") => invoke<string>("git_sync", { project, action }),
+  gitBranches: (project: string) => invoke<{ branches: { name: string; current: boolean; when: string; upstream: string }[] }>("git_branches", { project }),
+  gitCheckout: (project: string, branch: string, create?: boolean) => invoke<void>("git_checkout", { project, branch, create }),
+  gitStash: (project: string, pop?: boolean) => invoke<string>("git_stash", { project, pop }),
+  gitLog: (project: string) => invoke<{ hash: string; author: string; when: string; subject: string; refs: string }[]>("git_log", { project }),
+  gitSuggestMessage: (project: string) => invoke<string>("git_suggest_message", { project }),
   studioCommands: (project: string) => invoke<{ label: string; command: string; cwd: string; rel: string; kind: string; priority: number }[]>("studio_commands", { project }),
   studioLaunch: (project: string, cwd: string, command: string, name: string) => invoke<string>("studio_launch", { project, cwd, command, name }),
   studioStop: (id: string) => invoke<void>("studio_stop", { id }),

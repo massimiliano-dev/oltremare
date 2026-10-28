@@ -301,6 +301,26 @@ export function installPreview() {
         }
         case "dev_file":
           return { path: a.path, content: "export function totale(righe: Riga[]) {\n  return righe.reduce((s, r) => s + r.prezzo * r.qta, 0);\n}\n", binary: false, truncated: false, size: 120, ext: "ts" };
+        case "git_state": {
+          const B = "/Users/demo/Sviluppo/negozio/";
+          return { repo: true, branch: "feature/NEG-12-sconti", upstream: "origin/feature/NEG-12-sconti", ahead: 2, behind: 1, stash: 1, last: "a1b2c3d Carrello: righe e totale",
+            staged: [{ rel: "src/sconti.ts", path: B + "src/sconti.ts", status: "A" }],
+            changed: [{ rel: "src/carrello.ts", path: B + "src/carrello.ts", status: "M" }, { rel: "src/components/Carrello.svelte", path: B + "src/components/Carrello.svelte", status: "M" }, { rel: "tests/sconti.test.ts", path: B + "tests/sconti.test.ts", status: "?" }, { rel: "src/vecchio.js", path: B + "src/vecchio.js", status: "D" }] };
+        }
+        case "git_diff":
+          if (a.file?.includes("sconti.test")) return "diff --git a/tests/sconti.test.ts b/tests/sconti.test.ts\nnew file mode 100644\n--- /dev/null\n+++ b/tests/sconti.test.ts\n@@ -0,0 +1,4 @@\n+import { applicaSconto } from \"../src/sconti\";\n+test(\"BENVENUTO toglie il 10%\", () => {\n+  expect(applicaSconto(100, \"BENVENUTO\")).toBe(90);\n+});";
+          return a.staged
+            ? "diff --git a/src/sconti.ts b/src/sconti.ts\nnew file mode 100644\n--- /dev/null\n+++ b/src/sconti.ts\n@@ -0,0 +1,6 @@\n+export function applicaSconto(lordo: number, codice?: string) {\n+  const pct = codice ? (CODICI[codice] ?? 0) : 0;\n+  return Math.round(lordo * (1 - pct / 100) * 100) / 100;\n+}\n+\n+const CODICI: Record<string, number> = { BENVENUTO: 10 };"
+            : "diff --git a/src/carrello.ts b/src/carrello.ts\nindex 1a2b..3c4d 100644\n--- a/src/carrello.ts\n+++ b/src/carrello.ts\n@@ -1,8 +1,10 @@ import type { Riga } from \"./tipi\";\n import type { Riga } from \"./tipi\";\n+import { applicaSconto } from \"./sconti\";\n \n-export function totale(righe: Riga[]) {\n-  return righe.reduce((s, r) => s + r.prezzo * r.qta, 0);\n+export function totale(righe: Riga[], codice?: string) {\n+  const lordo = righe.reduce((s, r) => s + r.prezzo * r.qta, 0);\n+  return applicaSconto(lordo, codice);\n }\n \n export const vuoto = (righe: Riga[]) => righe.length === 0;\n@@ -20,4 +22,4 @@ export function riepilogo(righe: Riga[]) {\n   const n = righe.length;\n-  return `${n} articoli`;\n+  return `${n} ${n === 1 ? \"articolo\" : \"articoli\"}`;\n }\ndiff --git a/src/components/Carrello.svelte b/src/components/Carrello.svelte\n--- a/src/components/Carrello.svelte\n+++ b/src/components/Carrello.svelte\n@@ -12,3 +12,4 @@\n   <ul>{#each righe as r}<Riga {r} />{/each}</ul>\n-  <p class=\"tot\">{totale(righe)}</p>\n+  <input bind:value={codice} placeholder=\"Codice sconto\" />\n+  <p class=\"tot\">{totale(righe, codice)}</p>\n </div>\ndiff --git a/src/vecchio.js b/src/vecchio.js\ndeleted file mode 100644\n--- a/src/vecchio.js\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-// vecchia versione del carrello\n-module.exports = {};";
+        case "git_branches":
+          return { branches: [{ name: "feature/NEG-12-sconti", current: true, when: "2 minuti fa", upstream: "origin/feature/NEG-12-sconti" }, { name: "main", current: false, when: "ieri", upstream: "origin/main" }, { name: "fix/NEG-9-arrotondamenti", current: false, when: "3 giorni fa", upstream: "" }] };
+        case "git_log":
+          return [{ hash: "a1b2c3d", author: "Max", when: "2 ore fa", subject: "NEG-12 Carrello: righe e totale", refs: "HEAD" }, { hash: "9f8e7d6", author: "Max", when: "ieri", subject: "Pagina prodotto con galleria", refs: "" }, { hash: "5c4b3a2", author: "Max", when: "3 giorni fa", subject: "Primo commit", refs: "" }];
+        case "git_suggest_message":
+          return "NEG-12 Sconti nel carrello con codice percentuale";
+        case "git_stage": case "git_unstage": case "git_discard": case "git_checkout": return null;
+        case "git_commit": return "e4f5a6b";
+        case "git_sync": case "git_stash": return "ok";
         case "dev_git":
           return { repo: true, branch: "feature/NEG-12-sconti", last: "a1b2c3d Carrello: righe e totale", changes: [{ status: "M", path: "/Users/demo/Sviluppo/negozio/src/carrello.ts", rel: "src/carrello.ts" }, { status: "??", path: "/Users/demo/Sviluppo/negozio/src/sconti.ts", rel: "src/sconti.ts" }, { status: "M", path: "/Users/demo/Sviluppo/negozio/src/components/Carrello.svelte", rel: "src/components/Carrello.svelte" }, { status: "D", path: "/Users/demo/Sviluppo/negozio/src/vecchio.js", rel: "src/vecchio.js" }] };
         case "dev_diff":

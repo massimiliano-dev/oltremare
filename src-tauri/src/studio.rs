@@ -390,6 +390,10 @@ async fn ambiente_claudex(profilo: &str) -> std::result::Result<Vec<(String, Str
 
 // ---------- Lavoro: piano, approvazione, modifiche ----------
 
+pub fn cartella_pub(app: &App, p: &str) -> Result<PathBuf> {
+    cartella(app, p)
+}
+
 fn cartella(app: &App, p: &str) -> Result<PathBuf> {
     let reale = crate::tools::percorsi::espandi(p);
     let reale = reale.canonicalize().map_err(|_| AppError::msg("Cartella del progetto non trovata"))?;
