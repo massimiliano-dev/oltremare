@@ -6,6 +6,7 @@ pub mod appunti;
 pub mod browser;
 pub mod computer;
 pub mod fs;
+pub mod media;
 pub mod percorsi;
 pub mod posta;
 pub mod processi;
@@ -220,6 +221,42 @@ Scrivi una richiesta completa: obiettivo, vincoli, come verificare. Per continua
         nome: "apri_in_editor", etichetta: "Aprire nell'editor", categoria: "dev", rischio: Rischio::Read, parallelo: false, input_grande: false,
         descrizione: "Apre una cartella di progetto o un file (anche a una riga precisa) nell'editor di codice dell'utente.",
         schema: || obj(&[("percorso", s(P)), ("riga", i("Riga a cui posizionarsi (facoltativa)"))], &["percorso"]),
+    },
+    ToolSpec {
+        nome: "crea_pdf", etichetta: "Creare PDF", categoria: "media", rischio: Rischio::Write, parallelo: false, input_grande: true,
+        descrizione: "Crea un PDF impaginato da Markdown (titoli, elenchi, tabelle, immagini con percorso completo) o da HTML. \
+Senza «uscita» lo salva in Documenti/Oltremare.",
+        schema: || obj(&[("contenuto", s("Il testo in Markdown (o HTML)")), ("formato", e("Formato del contenuto", &["markdown", "html"])), ("uscita", s("Percorso del PDF da creare (facoltativo)")), ("titolo", s("Titolo del documento")), ("carta", e("Formato carta", &["A4", "Letter"])), ("orizzontale", b("Pagina orizzontale"))], &["contenuto"]),
+    },
+    ToolSpec {
+        nome: "crea_presentazione", etichetta: "Creare presentazioni", categoria: "media", rischio: Rischio::Write, parallelo: false, input_grande: true,
+        descrizione: "Crea una presentazione 16:9 da Markdown: slide separate da una riga con ---, titoli con #, elenchi, tabelle, immagini con ![](percorso completo). \
+Esporta in PDF, PowerPoint modificabile (pptx) o HTML. Slide brevi: un'idea per slide, al massimo 5 punti.",
+        schema: || obj(&[("slide", s("Le slide in Markdown, separate da ---")), ("formato", e("Formato di uscita", &["pdf", "pptx", "html"])), ("tema", e("Aspetto", &["chiaro", "scuro", "minimale"])), ("uscita", s("Percorso del file da creare (facoltativo)"))], &["slide"]),
+    },
+    ToolSpec {
+        nome: "genera_immagine", etichetta: "Generare immagini", categoria: "media", rischio: Rischio::Write, parallelo: false, input_grande: false,
+        descrizione: "Genera un'immagine da una descrizione: in locale e gratis con Draw Things sul Mac, altrimenti con OpenAI (a pagamento) se c'è la chiave. \
+Scrivi la descrizione in inglese, dettagliata (soggetto, stile, luce, inquadratura). Restituisce il file e un'anteprima.",
+        schema: || obj(&[("prompt", s("Descrizione dell'immagine, meglio in inglese")), ("negativo", s("Cosa evitare (facoltativo)")), ("larghezza", i("Pixel (predefinito 1024)")), ("altezza", i("Pixel (predefinito 1024)")), ("passi", i("Passi di generazione (facoltativo)")), ("uscita", s("Percorso del PNG (facoltativo)"))], &["prompt"]),
+    },
+    ToolSpec {
+        nome: "crea_video", etichetta: "Creare video", categoria: "media", rischio: Rischio::Write, parallelo: false, input_grande: false,
+        descrizione: "Crea un video MP4 da una sequenza di immagini (per esempio slide esportate o immagini generate), con dissolvenze e audio facoltativo. \
+Per montaggi più complessi usa FFmpeg con esegui_comando.",
+        schema: || json!({
+            "type": "object",
+            "properties": {
+                "immagini": { "type": "array", "items": { "type": "string" }, "description": "Percorsi delle immagini, in ordine" },
+                "secondi": { "type": "number", "description": "Secondi per immagine (predefinito 3)" },
+                "audio": { "type": "string", "description": "Musica o voce di sottofondo (facoltativo)" },
+                "formato": { "type": "string", "enum": ["orizzontale", "verticale", "quadrato"], "description": "16:9, 9:16 o 1:1" },
+                "dissolvenze": { "type": "boolean", "description": "Dissolvenze tra le immagini (predefinito sì)" },
+                "uscita": { "type": "string", "description": "Percorso del video (facoltativo)" }
+            },
+            "required": ["immagini"],
+            "additionalProperties": false
+        }),
     },
     ToolSpec {
         nome: "automazione_app", etichetta: "Comandare le app (AppleScript)", categoria: "apps", rischio: Rischio::Danger, parallelo: false, input_grande: true,
@@ -520,6 +557,7 @@ pub async fn esegui(nome: &str, input: &Value, amb: &Ambiente) -> Esito {
         "esegui_comando" => shell::esegui(input, &amb.radici, &amb.cancel).await,
         "apri_app" | "apri_percorso" | "apri_url" => apps::esegui(nome, input, amb).await,
         "automazione_app" => apps::automazione(input, &amb.cancel).await,
+        "crea_pdf" | "crea_presentazione" | "genera_immagine" | "crea_video" => media::esegui(nome, input, &amb.radici).await,
         "leggi_appunti" | "scrivi_appunti" => {
             let (nome, input) = (nome.to_string(), input.clone());
             tokio::task::spawn_blocking(move || appunti::esegui(&nome, &input)).await.unwrap_or_else(|e| Esito::errore(e.to_string()))
@@ -593,6 +631,10 @@ pub fn titolo(nome: &str, input: &Value) -> String {
         "web_invia_form" => "Invia il modulo".into(),
         "web_indietro" => "Torna indietro".into(),
         "apri_app" => format!("Apre {}", a("nome")),
+        "crea_pdf" => format!("Crea il PDF {}", if a("titolo").is_empty() { breve(a("uscita")) } else { a("titolo").to_string() }),
+        "crea_presentazione" => format!("Crea la presentazione {}", breve(a("uscita"))),
+        "genera_immagine" => format!("Genera «{}»", a("prompt").chars().take(60).collect::<String>()),
+        "crea_video" => format!("Crea un video da {} immagini", input["immagini"].as_array().map(|x| x.len()).unwrap_or(0)),
         "automazione_app" => {
             let app = regex::Regex::new(r#"(?i)(?:tell application|Application\()\s*["']([^"']+)"#).ok().and_then(|r| r.captures(a("script")).map(|c| c[1].to_string()));
             match app {

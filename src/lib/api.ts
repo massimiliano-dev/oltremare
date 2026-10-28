@@ -287,7 +287,7 @@ export interface ClaudeCodeStatus {
 }
 
 export type Risk = "read" | "write" | "danger";
-export type ToolCategory = "fs" | "shell" | "apps" | "clipboard" | "computer" | "browser" | "mail" | "calendar" | "tasks" | "notifications" | "dev" | "other" | `mcp:${string}`;
+export type ToolCategory = "fs" | "shell" | "apps" | "clipboard" | "computer" | "browser" | "mail" | "calendar" | "tasks" | "notifications" | "dev" | "media" | "other" | `mcp:${string}`;
 
 export interface ToolDef {
   name: string;

@@ -13,6 +13,7 @@ export const CATEGORY: Record<string, { label: string; icon: string }> = {
   tasks: { label: "Attività", icon: "check" },
   notifications: { label: "Notifiche", icon: "bell" },
   dev: { label: "Sviluppo", icon: "terminal" },
+  media: { label: "Contenuti", icon: "image" },
   other: { label: "Altro", icon: "spark" },
 };
 
@@ -34,6 +35,8 @@ export function toolIcon(category: string | undefined, tool?: string): string {
   if (tool === "attendi") return "clock";
   if (category?.startsWith("mcp:")) return "layers";
   if (tool === "sviluppa") return "terminal";
+  if (tool === "crea_pdf" || tool === "crea_presentazione") return "draft";
+  if (tool === "crea_video") return "video";
   if (tool === "apri_in_editor") return "pen";
   return CATEGORY[(category as ToolCategory) ?? "other"]?.icon ?? "spark";
 }

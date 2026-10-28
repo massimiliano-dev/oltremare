@@ -52,6 +52,12 @@ Se non c'è nessuna chiave API ma Claude Code è collegato, gli agenti passano d
   - si ferma se muovi il mouse;
   - non tocca le app di password e banca.
 - **Browser**: Chrome o Edge con un profilo separato dal tuo, di norma invisibile: nessuna finestra sul tuo schermo, le pagine si vedono negli screenshot dei passaggi. In Impostazioni → Generale si può mostrare. Lavora su riferimenti agli elementi della pagina e non compila mai i campi password. Si può limitare a certi siti.
+- **Contenuti**:
+  - **PDF** da Markdown o HTML, impaginati con il Chrome già usato dagli agenti, senza programmi in più.
+  - **Presentazioni** 16:9 in PDF, PowerPoint modificabile o HTML, con [Marp CLI](https://github.com/marp-team/marp-cli) (`npm i -g @marp-team/marp-cli`). Senza Marp si fanno comunque PDF e HTML.
+  - **Immagini** gratis e in locale con [Draw Things](https://drawthings.ai). Si installa dal Mac App Store e si attiva in Impostazioni → API Server, porta 7860. Se Draw Things non è acceso si usa OpenAI, a pagamento, se c'è la chiave.
+  - **Video** MP4 da immagini, con dissolvenze e audio, tramite FFmpeg (`brew install ffmpeg`).
+  - I file vanno in Documenti/Oltremare se non si indica un percorso.
 - **Allegati in chat**: PDF, immagini, Excel, Word, PowerPoint, CSV, XML, JSON, testo. Si trascinano o si scelgono con la graffetta.
 
 ### Voce

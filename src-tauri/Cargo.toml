@@ -63,6 +63,8 @@ plist = "1"
 # Pianificazione (espressioni cron) e cartelle osservate
 cron = "0.15"
 notify = "8"
+# Markdown → HTML per PDF e documenti
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 # Strumenti sul computer
 similar = "2"
 trash = "5"
