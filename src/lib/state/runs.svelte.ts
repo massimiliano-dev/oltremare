@@ -20,8 +20,16 @@ class RunsState {
   /** Avvisi di avanzamento per esecuzione (es. "Avvio l'AI locale…") */
   progress = $state<Record<string, string>>({});
   sending = $state(false);
+  /** Messaggi scritti mentre l'agente lavorava: partono in ordine appena finisce */
+  queue = $state<{ id: number; text: string; files: string[]; agentId: string; conversationId: string }[]>([]);
+  /** Coda ferma (dopo «Ferma» o un errore) per conversazione */
+  paused = $state<Record<string, boolean>>({});
+  private queueId = 0;
+  private forceNext: number | null = null;
 
   current = $derived(this.order.map((id) => this.byId[id]).filter(Boolean));
+  /** La coda della conversazione aperta */
+  queued = $derived(this.queue.filter((q) => q.conversationId === this.conversationId && q.agentId === agents.selected?.id));
   active = $derived(this.current.find((r) => ACTIVE.has(r.status)) ?? null);
   selected = $derived((this.selectedRunId && this.byId[this.selectedRunId]) || this.current.at(-1) || null);
   conversation = $derived(this.conversations.find((c) => c.id === this.conversationId) ?? null);
@@ -73,6 +81,7 @@ class RunsState {
         run.endedAt = p.endedAt;
       }
       if (p.status === "error" && p.error && p.conversationId !== this.conversationId) ui.toast(p.error, "error");
+      this.nextInQueue(p.conversationId, p.status);
       // La conversazione sale in cima alla lista
       const c = this.conversations.find((x) => x.id === p.conversationId);
       if (c) {
@@ -185,6 +194,72 @@ class RunsState {
     } finally {
       this.expecting = false;
       this.sending = false;
+    }
+  }
+
+  /** Accoda un messaggio per la conversazione in corso (l'agente sta lavorando). */
+  enqueue(text: string, files: string[] = []) {
+    const agent = agents.selected;
+    const conv = this.active?.conversationId ?? this.conversationId;
+    if (!agent || !conv) return false;
+    this.queue = [...this.queue, { id: ++this.queueId, text, files, agentId: agent.id, conversationId: conv }];
+    delete this.paused[conv];
+    return true;
+  }
+
+  unqueue(id: number) {
+    this.queue = this.queue.filter((q) => q.id !== id);
+  }
+
+  /** Interrompe il lavoro in corso e manda subito questo messaggio. */
+  sendNow(id: number) {
+    const q = this.queue.find((x) => x.id === id);
+    if (!q) return;
+    const run = Object.values(this.byId).find((r) => r.conversationId === q.conversationId && ACTIVE.has(r.status));
+    if (!run) {
+      this.dispatch(q);
+      return;
+    }
+    this.forceNext = id;
+    this.cancel(run.id);
+  }
+
+  /** Riprende una coda in pausa. */
+  resume(conversationId: string) {
+    delete this.paused[conversationId];
+    const q = this.queue.find((x) => x.conversationId === conversationId);
+    if (q && !Object.values(this.byId).some((r) => r.conversationId === conversationId && ACTIVE.has(r.status))) this.dispatch(q);
+  }
+
+  private nextInQueue(conversationId: string, status: string) {
+    const forced = this.forceNext != null ? this.queue.find((x) => x.id === this.forceNext) : undefined;
+    this.forceNext = null;
+    if (forced) {
+      this.dispatch(forced);
+      return;
+    }
+    const q = this.queue.find((x) => x.conversationId === conversationId);
+    if (!q) return;
+    // Dopo «Ferma» o un errore la coda aspetta: decide l'utente
+    if (status !== "done") {
+      this.paused[conversationId] = true;
+      if (conversationId === this.conversationId) ui.toast("Messaggi in coda in pausa: inviali quando vuoi", "info");
+      return;
+    }
+    this.dispatch(q);
+  }
+
+  private async dispatch(q: { id: number; text: string; files: string[]; agentId: string; conversationId: string }) {
+    this.unqueue(q.id);
+    try {
+      const run = await api.runStart({ agentId: q.agentId, conversationId: q.conversationId, text: q.text, source: "main", attachments: q.files });
+      this.byId[run.id] ??= run;
+      if (q.conversationId === this.conversationId) this.adopt(this.byId[run.id]);
+    } catch (e) {
+      // Torna in testa alla coda, in pausa
+      this.queue = [q, ...this.queue];
+      this.paused[q.conversationId] = true;
+      ui.toast(errorText(e), "error");
     }
   }
 
