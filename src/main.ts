@@ -7,6 +7,7 @@ import App from "./App.svelte";
 import CompanionApp from "./CompanionApp.svelte";
 import PaletteApp from "./PaletteApp.svelte";
 import IslandApp from "./IslandApp.svelte";
+import StudioApp from "./StudioApp.svelte";
 import { theme } from "./lib/state/theme.svelte";
 
 // Fuori da Tauri, in sviluppo, si lavora sulla grafica con dati finti
@@ -20,7 +21,7 @@ theme.boot();
 
 // Stesso pacchetto per tutte le finestre: la vista si sceglie dall'indirizzo
 const view = new URLSearchParams(location.search).get("view");
-const Root = view === "avatar" ? CompanionApp : view === "palette" ? PaletteApp : view === "island" ? IslandApp : App;
+const Root = view === "avatar" ? CompanionApp : view === "palette" ? PaletteApp : view === "island" ? IslandApp : view === "studio" ? StudioApp : App;
 const app = mount(Root, { target: document.getElementById("app")! });
 
 export default app;

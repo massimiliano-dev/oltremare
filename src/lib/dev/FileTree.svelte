@@ -3,7 +3,8 @@
   import FileTree from "./FileTree.svelte";
   import { dev } from "../state/dev.svelte";
 
-  let { path, depth = 0 }: { path: string; depth?: number } = $props();
+  let { path, depth = 0, onopen }: { path: string; depth?: number; onopen?: (p: string) => void } = $props();
+  const apri = (p: string) => (onopen ? onopen(p) : dev.openFile(p));
   const entries = $derived(dev.tree[path] ?? []);
   const STATUS: Record<string, string> = { M: "modificato", A: "aggiunto", D: "eliminato", "??": "nuovo", R: "rinominato" };
   // Una cartella è «cambiata» se contiene file cambiati
@@ -19,10 +20,10 @@
       <span>{e.name}</span>
     </button>
     {#if dev.expanded[e.path]}
-      <FileTree path={e.path} depth={depth + 1} />
+      <FileTree path={e.path} depth={depth + 1} {onopen} />
     {/if}
   {:else}
-    <button class="row" class:on={dev.file?.path === e.path} class:ch={!!st} style="padding-left:{25 + depth * 14}px" onclick={() => dev.openFile(e.path)} title={st ? STATUS[st] ?? st : e.name}>
+    <button class="row" class:on={dev.file?.path === e.path} class:ch={!!st} style="padding-left:{25 + depth * 14}px" onclick={() => apri(e.path)} title={st ? STATUS[st] ?? st : e.name}>
       <span class="name">{e.name}</span>
       {#if st}<em class="st st-{st === '??' ? 'n' : st[0]}">{st === "??" ? "N" : st[0]}</em>{/if}
     </button>

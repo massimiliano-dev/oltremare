@@ -3,7 +3,8 @@
   "identifier": "default",
   "description": "Permessi della finestra principale",
   "windows": [
-    "main"
+    "main",
+    "studio"
   ],
   "permissions": [
     "core:default",

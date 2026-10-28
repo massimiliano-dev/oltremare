@@ -13,7 +13,7 @@ export const PROVIDERS: { id: Provider; label: string; sub: string }[] = [
 
 export const FALLBACK_MODELS: Record<Provider, string[]> = {
   anthropic: ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1"],
-  "claude-code": ["default", "opus", "sonnet", "haiku"],
+  "claude-code": ["default", "opus", "sonnet", "haiku", "claude-fable-5-1"],
   openai: ["gpt-5", "gpt-5-mini"],
   local: [],
 };
@@ -23,7 +23,7 @@ export function providerLabel(p: Provider | undefined) {
   return PROVIDERS.find((x) => x.id === p)?.label ?? "Claude";
 }
 
-const CC_MODELS: Record<string, string> = { default: "quello del piano", opus: "Opus", sonnet: "Sonnet", haiku: "Haiku" };
+const CC_MODELS: Record<string, string> = { default: "quello del piano", opus: "Opus", sonnet: "Sonnet", haiku: "Haiku", "claude-fable-5-1": "Fable" };
 
 /** Nome breve del modello per liste ed etichette. */
 export function modelLabel(p: Provider, model: string) {

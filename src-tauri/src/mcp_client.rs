@@ -462,6 +462,19 @@ pub async fn chiama(app: &AppHandle, nome: &str, input: &Value, cancel: &tokio_u
     e
 }
 
+/// Chiama uno strumento di un server collegato per nome del server e nome originale dello strumento (testo del risultato).
+pub async fn chiama_server(app: &AppHandle, server: &str, strumento: &str, input: Value) -> std::result::Result<String, String> {
+    let st = app.state::<App>();
+    let id = st.mcp_clienti.stato().into_iter().find(|s| s.name.eq_ignore_ascii_case(server) && s.connected).map(|s| s.id).ok_or_else(|| format!("Il server «{server}» non è collegato"))?;
+    let c = st.mcp_clienti.cliente(&id).ok_or("Server non collegato")?;
+    let r = c.richiesta("tools/call", json!({ "name": strumento, "arguments": input }), Duration::from_secs(60)).await?;
+    let t = r["content"].as_array().into_iter().flatten().filter_map(|b| b["text"].as_str()).collect::<Vec<_>>().join("\n");
+    if r["isError"].as_bool() == Some(true) {
+        return Err(t);
+    }
+    Ok(t)
+}
+
 /// Server MCP configurati in Claude Code (ambito utente): si importano le definizioni.
 /// Le intestazioni fisse e le variabili d'ambiente finiscono nel portachiavi.
 pub fn da_claude_code() -> Vec<(ServerMcp, Option<Value>, Option<Value>)> {
@@ -515,6 +528,21 @@ mod prova_reale {
             let nomi: Vec<&str> = r["tools"].as_array().unwrap().iter().filter_map(|t| t["name"].as_str()).collect();
             println!("{}: {} strumenti {:?}; istruzioni: {}", s.name, nomi.len(), nomi, init["instructions"].as_str().unwrap_or("-").chars().take(80).collect::<String>());
             assert!(!nomi.is_empty());
+        }
+    }
+}
+
+#[cfg(test)]
+mod prova_issue {
+    #[tokio::test]
+    #[ignore]
+    async fn cerca_e_elenca() {
+        let (s, _, _) = super::da_claude_code().into_iter().find(|(s, _, _)| s.name == "keyops").unwrap();
+        let (c, _) = super::Cliente::connetti(&s).await.unwrap();
+        for (t, a) in [("search", serde_json::json!({ "query": "Oltremare" })), ("search", serde_json::json!({ "query": "KeyOps" })), ("list_my_issues", serde_json::json!({}))] {
+            let r = c.richiesta("tools/call", serde_json::json!({ "name": t, "arguments": a }), std::time::Duration::from_secs(30)).await.unwrap();
+            let txt = r["content"][0]["text"].as_str().unwrap_or_default();
+            println!("== {t} {a}\n{}", txt.chars().take(700).collect::<String>());
         }
     }
 }

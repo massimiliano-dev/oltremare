@@ -126,7 +126,7 @@ class RunsState {
 
   /** Apre un'esecuzione partita altrove (briefing, trigger, voce, palette). */
   async openRun(agentId: string, conversationId: string) {
-    ui.view = agentId === "sviluppatore" ? "dev" : "chat";
+    ui.view = "chat";
     if (agents.selected?.id !== agentId) {
       agents.selectedId = agentId;
       try {

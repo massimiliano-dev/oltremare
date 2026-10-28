@@ -141,6 +141,21 @@ Microsoft 365 e Outlook.com tramite Microsoft Graph, Gmail e Google tramite le l
 
 Il compagno può essere un'**isola**: una pillola nera in alto al centro. Sui Mac con la notch le sta attorno, come la Dynamic Island; sugli altri resta appena sotto la barra dei menu. A riposo è piccola. Si allarga con un'animazione quando Oltremare ascolta (onda della voce e trascrizione), lavora (agente e passo in corso) o parla. Si allarga anche quando chiede un'approvazione, con i pulsanti Consenti e Nega, o quando arriva un avviso. Al passaggio del mouse mostra Parla, Chiedi e Apri; un clic apre la palette. Lo stile si sceglie in Impostazioni → Aspetto.
 
+### Oltremare Studio (modalità sviluppo)
+
+Una finestra a sé, come un IDE, per lavorare sul codice con Claude. Si apre con l'icona del terminale in alto o con `⌘⇧D`.
+- **Progetti**: la schermata iniziale mostra i progetti delle cartelle Scrivania/Sviluppo e Scrivania/Personale. Per ognuno ci sono icona, stack riconosciuto (anche nei monorepo), ramo git, modifiche non salvate e attività recente. Si può cercare, filtrare e fissare i preferiti.
+- **Spazio di lavoro**:
+  - esplora file, con le modifiche git in evidenza;
+  - editor di codice (CodeMirror) a schede con salvataggio;
+  - differenze;
+  - anteprima dell'app sull'indirizzo locale;
+  - processi con i log.
+- **Orchestratore**: per ogni richiesta decide il tipo (domanda, piccola, media, grande), il modello (Haiku, Sonnet, Opus, Fable) e se serve un piano. Si può sempre cambiare. Con il piano, Claude Code prima analizza senza toccare nulla; quando approvi, scrive il codice nella stessa conversazione.
+- **Altre AI, su scelta**: con [Claudex](https://github.com/StringKe/claudex) installato e configurato, ogni richiesta può essere eseguita da un'altra AI, per esempio Codex o GPT con l'abbonamento ChatGPT, Gemini, Grok, DeepSeek o modelli locali. Si può anche chiedere un secondo parere sul piano o sulle modifiche.
+- **Gestionale delle issue**: ogni progetto si collega al suo progetto nel gestionale (server MCP), con suggerimenti per nome. Nel pannello «Task» compaiono le tue issue con lo stato, e «Lavora su questa issue» passa la richiesta all'orchestratore. Claude legge issue e documentazione con gli strumenti del gestionale.
+- L'agente **Sviluppatore** nella finestra principale risponde alle domande e non modifica il codice: per lavorare apre lo Studio sul progetto giusto.
+
 ### Finestre e interfaccia
 - **Icona nella barra dei menu** (area di notifica su Windows): segue lo stato dell'avatar e mostra un segno quando serve la tua attenzione. Dal menu: palette, briefing, compagno, ascolto, ferma tutto, avvio automatico, esci. Chiudere la finestra non spegne Oltremare.
 - **Palette** da qualsiasi app (`⌥Spazio`): scrivi, scegli l'agente con «/», la risposta arriva lì. Puoi approvare al volo, e `⌘↵` apre la conversazione completa.

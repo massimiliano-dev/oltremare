@@ -165,6 +165,35 @@ export interface UsageStats {
   subscription: { status?: string; resetsAt?: number; rateLimitType?: string; overageStatus?: string; overageDisabledReason?: string; isUsingOverage?: boolean; at?: number } | null;
 }
 
+export interface StudioProject {
+  name: string;
+  group: string;
+  root: string;
+  path: string;
+  stack: string[];
+  branch: string;
+  changes: number;
+  updatedAt: number;
+  sessions: number;
+  lastSession: number | null;
+  icon: string | null;
+  hue: number;
+  readme: string | null;
+}
+
+export interface StudioDecision {
+  kind: "domanda" | "piccola" | "media" | "grande";
+  model: "haiku" | "sonnet" | "opus" | "fable";
+  plan: boolean;
+  reason: string;
+  source: string;
+}
+
+export interface ClaudexInfo {
+  installed: boolean;
+  profiles: { name: string; provider: string; model: string }[];
+}
+
 export interface DevEntry {
   name: string;
   path: string;
@@ -516,6 +545,21 @@ export const api = {
   devSend: (folder: string, message: string, opts: { session?: string; newSession?: boolean; here?: boolean } = {}) =>
     invoke<string>("dev_send", { folder, message, session: opts.session, newSession: opts.newSession, here: opts.here }),
   devStop: (folder: string) => invoke<boolean>("dev_stop", { folder }),
+  studioProjects: () => invoke<StudioProject[]>("studio_projects"),
+  studioOpen: (project?: string, prompt?: string) => invoke<void>("studio_open", { project, prompt }),
+  studioClassify: (project: string, text: string) => invoke<StudioDecision>("studio_classify", { project, text }),
+  studioClaudex: () => invoke<ClaudexInfo>("studio_claudex"),
+  studioRun: (project: string, text: string, model: string, plan: boolean, profile?: string, session?: string, newSession?: boolean) =>
+    invoke<{ session: string; plan: boolean }>("studio_run", { project, text, model, plan, profile, session, newSession }),
+  studioPlan: (project: string, session: string) => invoke<{ plan: string }>("studio_plan", { project, session }),
+  studioApprove: (project: string, session: string, model: string, profile?: string, notes?: string) => invoke<{ session: string }>("studio_approve", { project, session, model, profile, notes }),
+  studioSecondOpinion: (project: string, profile: string, about: "plan" | "diff", plan?: string) => invoke<string>("studio_second_opinion", { project, profile, about, plan }),
+  studioSave: (path: string, content: string) => invoke<void>("studio_save", { path, content }),
+  studioLink: (project: string) => invoke<{ link: { server: string; project: string; name: string } | null; servers: string[]; canImport: boolean }>("studio_link", { project }),
+  studioLinkSet: (project: string, server: string, key: string, name: string) => invoke<void>("studio_link_set", { project, server, key, name }),
+  studioLinkSuggest: (project: string, server: string) => invoke<{ key: string; name: string }[]>("studio_link_suggest", { project, server }),
+  studioIssues: (project: string) => invoke<{ issues: { key: string; title: string; status: string; extra: string | null }[] }>("studio_issues", { project }),
+  studioIssue: (project: string, key: string) => invoke<string>("studio_issue", { project, key }),
   editors: () => invoke<{ name: string; path: string }[]>("editors_list"),
   paletteToggle: () => invoke<void>("palette_toggle"),
   paletteHide: () => invoke<void>("palette_hide"),

@@ -78,6 +78,10 @@ pub struct Settings {
     pub dev_mode: String,
     /// Stile del compagno: "floating" (avatar trascinabile) o "island" (pillola in alto, attorno alla notch)
     pub companion_style: String,
+    /// Cartelle in più con i progetti dello Studio (oltre a Scrivania/Sviluppo e Scrivania/Personale)
+    pub studio_roots: Vec<String>,
+    /// Progetto dello Studio (cartella) → progetto nel gestionale delle issue (server MCP e chiave)
+    pub studio_links: std::collections::BTreeMap<String, StudioLink>,
     /// Il browser degli agenti si vede (finestra) o lavora invisibile
     pub browser_visible: bool,
     /// Il controllo dello schermo aspetta che l'utente lasci mouse e tastiera
@@ -91,6 +95,14 @@ pub struct Settings {
     pub palette_hotkey: String,
     pub autostart: bool,
     pub layout: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct StudioLink {
+    pub server: String,
+    pub project: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -149,6 +161,8 @@ impl Default for Settings {
             editor_app: String::new(),
             dev_mode: "editor".into(),
             companion_style: "island".into(),
+            studio_roots: vec![],
+            studio_links: Default::default(),
             browser_visible: false,
             computer_wait_idle: true,
             accent_hue: 275.0,
@@ -286,21 +300,18 @@ pub fn agente_sviluppatore() -> Agent {
         name: "Sviluppatore".into(),
         icon: "terminal".into(),
         hue: 300.0,
-        description: "Sviluppa come faresti tu: Claude nell'editor, backend acceso, prove nel browser".into(),
-        system_prompt: "Sei lo sviluppatore di fiducia dell'utente e lavori sui suoi progetti come lavorerebbe lui: dentro l'editor, parlando con Claude nel pannello di Claude Code, provando il risultato.\n\nCome lavori:\n1. Capisci il progetto: trova la cartella (di solito nelle cartelle di sviluppo), guarda README, script di avvio e struttura.\n2. Se sono collegati strumenti di gestione delle issue (server MCP), usali secondo le loro istruzioni: cerca o crea la issue, segna l'inizio del lavoro, metti la chiave della issue nei commit e aggiorna lo stato alla fine.\n3. Affida il lavoro sul codice a Claude nell'editor con «editor_claude_scrivi»: scrivi come scriverebbe l'utente (obiettivo, vincoli, come verificare). Poi segui con «editor_claude_stato» usando attendi_secondi (per esempio 300) invece di controllare di continuo.\n4. Quando Claude è fermo su una richiesta di permesso, guarda lo schermo (schermo_screenshot) e rispondi come farebbe l'utente: consenti comandi di sviluppo normali (build, test, avvio, git locale); non consentire push, pubblicazioni, cancellazioni di massa o comandi fuori dal progetto: in quei casi chiedi all'utente. Quando Claude fa una domanda, rispondi tu se la risposta è chiara dalla richiesta, altrimenti chiedi all'utente.\n5. Prova davvero: avvia backend e frontend con «avvia_processo» (leggi gli script del progetto per il comando giusto), controlla i log con «log_processo», apri l'app nel browser con gli strumenti web (web_apri sull'indirizzo locale, web_snapshot, web_screenshot, clic e compilazione) e verifica che la funzione richiesta funzioni.\n6. Se qualcosa non va, scrivi a Claude nel pannello cosa hai visto (errore, log, comportamento) e ripeti finché funziona.\n7. Alla fine ferma i processi che non servono più e riassumi all'utente: cosa è cambiato, come l'hai provato, cosa resta. Non fare push e non pubblicare senza una richiesta esplicita.".into(),
-        tools: ["fs", "shell", "apps", "mcp", "computer", "browser", "web", "apri_in_editor", "editor_claude_scrivi", "editor_claude_stato", "avvia_processo", "processi", "log_processo", "ferma_processo"].iter().map(|s| s.to_string()).collect(),
+        description: "Domande sui progetti; per scrivere codice apre lo Studio".into(),
+        system_prompt: "Sei lo Sviluppatore di Oltremare nella finestra principale: rispondi a domande sui progetti dell'utente e fai piccole verifiche, ma non scrivi né modifichi codice.\n\n- Per capire: leggi file e cartelle, cerca sul web, consulta il gestionale delle issue se è collegato (server MCP), guarda i processi e i log.\n- Spiega in modo chiaro e breve, con riferimenti a file e righe quando servono.\n- Se la richiesta comporta modifiche al codice (correzioni, nuove funzionalità, refactoring), non farle: apri lo Studio con «apri_studio» sul progetto giusto e con la richiesta già scritta in modo completo. Nello Studio un orchestratore sceglie modello e piano e l'utente approva.\n- Puoi aprire file nell'editor con «apri_in_editor» per mostrarli.".into(),
+        tools: ["leggi_file", "elenca_cartella", "cerca_file", "info_file", "web", "mcp", "web_apri", "web_testo", "web_snapshot", "web_screenshot", "web_trova", "apri_in_editor", "apri_studio", "processi", "log_processo", "editor_claude_stato"].iter().map(|s| s.to_string()).collect(),
         voice_reply: "whenAsked".into(),
         effort: "medium".into(),
-        max_turns: 200,
         system: false,
         created_at: t,
         updated_at: t,
         ..Agent::default()
     };
-    // Scrivere a Claude e seguirlo è il suo lavoro: niente conferme a ogni messaggio
-    for k in ["editor_claude_scrivi", "editor_claude_stato", "processi", "log_processo", "ferma_processo", "apri_in_editor"] {
-        a.policy.per_tool.insert(k.to_string(), "allow".to_string());
-    }
+    a.policy.per_tool.insert("apri_studio".into(), "allow".into());
+    a.policy.per_tool.insert("apri_in_editor".into(), "allow".into());
     a
 }
 

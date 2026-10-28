@@ -49,8 +49,8 @@ class AgentsState {
   }
 
   select(id: string) {
-    // Lo Sviluppatore lavora nella vista Sviluppo; gli altri agenti nella chat
-    ui.view = id === DEV_AGENT ? "dev" : "chat";
+    // Tutti gli agenti stanno nella chat: lo sviluppo vero si fa nello Studio
+    ui.view = "chat";
     if (id === this.selected?.id) return;
     this.selectedId = id;
     try {

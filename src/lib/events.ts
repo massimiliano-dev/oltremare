@@ -43,6 +43,7 @@ export interface EventMap {
   "palette-open": { agentId: string | null };
   "dev-project": { folder: string };
   "dev-session": { folder: string; done: boolean };
+  "studio-open": { project: string | null; prompt: string | null };
 }
 
 export function on<K extends keyof EventMap>(name: K, cb: (payload: EventMap[K]) => void): Promise<UnlistenFn> {

@@ -26,7 +26,7 @@
   import DevView from "./lib/dev/DevView.svelte";
   import { dev } from "./lib/state/dev.svelte";
   import { on } from "./lib/events";
-  import { errorText } from "./lib/api";
+  import { errorText, api } from "./lib/api";
 
   let ready = $state(false);
 
@@ -44,8 +44,6 @@
       await Promise.all([agents.init(), settings.checkClaudeCode()]);
       await agents.adoptSubscription();
       if (agents.selected) await runs.selectAgent(agents.selected.id);
-      // Lo Sviluppatore si riapre nella sua vista
-      if (agents.selected?.id === "sviluppatore") ui.view = "dev";
     } catch (e) {
       ui.toast(errorText(e), "error");
     } finally {
@@ -127,9 +125,7 @@
     }
     if (mod && e.shiftKey && k === "d") {
       e.preventDefault();
-      if (ui.view === "dev") ui.view = "chat";
-      else if (agents.byId("sviluppatore")) agents.select("sviluppatore");
-      else ui.view = "dev";
+      api.studioOpen().catch(() => {});
       return;
     }
     if (mod && k === "b") {

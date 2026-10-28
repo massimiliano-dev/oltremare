@@ -242,6 +242,34 @@ export function installPreview() {
         }
         case "island_info":
           return { present: true, width: 186, height: 32 };
+        case "studio_projects": {
+          const P = [
+            ["Oltremare", "Suites", "Personale", ["Tauri", "Svelte", "TypeScript", "Rust"], "main", 3, 275, "Assistente personale desktop con agenti, voce e avatar."],
+            ["Cobalto", "Suites", "Personale", ["Tauri", "Svelte", "Rust"], "main", 0, 230, "Client di posta desktop blu e bianco."],
+            ["KeyOps", "", "Sviluppo", ["Next.js", "TypeScript", "Prisma", "Docker"], "develop", 12, 300, "Gestionale di issue e progetti."],
+            ["FarmaQuest", "", "Sviluppo", ["React", "TypeScript", "Docker", "Node"], "main", 0, 150, "Piattaforma per farmacie con backend e pannello admin."],
+            ["WeddingPlan", "", "Personale", ["Next.js", "TypeScript"], "main", 1, 340, "Pianificazione del matrimonio: fornitori, budget, invitati."],
+            ["SmartEdil", "", "Personale", ["Next.js", "Docker"], "main", 0, 40, "Gestionale per l'edilizia."],
+            ["CantierOS", "", "Sviluppo", [], "main", 0, 20, null],
+            ["Portfolio", "", "Personale", ["Svelte"], "main", 0, 190, "Sito personale."],
+          ];
+          return P.map(([name, group, root, stack, branch, changes, hue, readme], i) => ({ name, group, root, path: `/Users/demo/Desktop/${root}/${group ? group + "/" : ""}${name}`, stack, branch, changes, updatedAt: now - i * 5 * 3600_000, sessions: i, lastSession: null, icon: null, hue, readme }));
+        }
+        case "studio_link":
+          return { link: { server: "issue", project: "OLT", name: "Oltremare" }, servers: ["issue"], canImport: true };
+        case "studio_issues":
+          return { issues: [{ key: "OLT-12", title: "Sconti nel carrello", status: "In corso", extra: null }, { key: "OLT-9", title: "Esportazione PDF delle fatture", status: "Da fare", extra: null }, { key: "OLT-4", title: "Login con Google", status: "In revisione", extra: null }] };
+        case "studio_issue":
+          return "# OLT-12 Sconti nel carrello\nStato: In corso\n\n## Descrizione\nCodice sconto in percentuale, con test.";
+        case "studio_claudex":
+          return { installed: false, profiles: [] };
+        case "studio_classify":
+          await wait(600);
+          return { kind: "media", model: "sonnet", plan: true, reason: "Tocca più file del carrello e serve decidere dove calcolare lo sconto.", source: "orchestratore" };
+        case "studio_run":
+          return { session: "s1", plan: a.plan };
+        case "studio_plan":
+          return { plan: "## Piano\n1. Aggiungere `applicaSconto` in `src/sconti.ts`\n2. Usarla in `totale()`\n3. Test con Vitest" };
         case "dev_projects":
           return ["/Users/demo/Sviluppo/negozio"];
         case "dev_open":

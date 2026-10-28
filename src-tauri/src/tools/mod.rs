@@ -278,6 +278,12 @@ Per aprire e navigare siti web non comandare Chrome o Safari dell'utente: usa gl
         schema: || obj(&[("script", s("Lo script")), ("linguaggio", e("Linguaggio dello script", &["applescript", "javascript"]))], &["script"]),
     },
     ToolSpec {
+        nome: "apri_studio", etichetta: "Aprire lo Studio", categoria: "dev", rischio: Rischio::Read, parallelo: false, input_grande: false,
+        descrizione: "Apre Oltremare Studio, la modalità sviluppo in una finestra a sé, sul progetto indicato e con la richiesta già scritta. \
+Usalo per qualsiasi lavoro che modifica il codice: lì un orchestratore sceglie modello e piano e l'utente approva.",
+        schema: || obj(&[("cartella", s("Cartella del progetto (facoltativa)")), ("richiesta", s("Cosa fare, scritto come lo scriverebbe l'utente (facoltativa)"))], &[]),
+    },
+    ToolSpec {
         nome: "editor_claude_scrivi", etichetta: "Scrivere a Claude nell'editor", categoria: "dev", rischio: Rischio::Write, parallelo: false, input_grande: true,
         descrizione: "Lavora come l'utente: porta in primo piano il progetto nell'editor, scrive il messaggio nel pannello di Claude Code e preme Invio. \
 Continua l'ultima conversazione del progetto (o quella indicata), oppure ne apre una nuova. Claude nel pannello legge il codice, lo modifica, esegue comandi e usa i server MCP \
@@ -620,6 +626,7 @@ pub fn titolo(nome: &str, input: &Value) -> String {
         "notifiche_recenti" => "Legge le notifiche".into(),
         "sviluppa" => format!("Sviluppa in {}: {}", breve(a("cartella")), a("richiesta").chars().take(80).collect::<String>()),
         "apri_in_editor" => format!("Apre {} nell'editor", breve(a("percorso"))),
+        "apri_studio" => format!("Apre lo Studio{}", if a("cartella").is_empty() { String::new() } else { format!(" su {}", breve(a("cartella"))) }),
         "editor_claude_scrivi" => format!("Scrive a Claude in {}: {}", breve(a("cartella")), a("messaggio").chars().take(70).collect::<String>()),
         "editor_claude_stato" => format!("Guarda il lavoro di Claude in {}", breve(a("cartella"))),
         "avvia_processo" => format!("Avvia {} in {}", if a("nome").is_empty() { a("comando") } else { a("nome") }, breve(a("cartella"))),

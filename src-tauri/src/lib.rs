@@ -17,6 +17,7 @@ mod providers;
 mod shell_env;
 mod sidecar;
 mod store;
+mod studio;
 mod tools;
 mod triggers;
 mod voce;
@@ -951,6 +952,20 @@ pub fn run() {
             accounts_list,
             mcp_status,
             dev::dev_projects,
+            studio::studio_projects,
+            studio::studio_open,
+            studio::studio_classify,
+            studio::studio_claudex,
+            studio::studio_run,
+            studio::studio_plan,
+            studio::studio_approve,
+            studio::studio_second_opinion,
+            studio::studio_save,
+            studio::studio_link,
+            studio::studio_link_set,
+            studio::studio_link_suggest,
+            studio::studio_issues,
+            studio::studio_issue,
             dev::dev_open,
             dev::dev_tree,
             dev::dev_file,

@@ -70,7 +70,24 @@ async fn editor_cmd(cli: &Path, args: &[&str]) -> bool {
 }
 
 /// Claude Code senza interfaccia, nella cartella del progetto, con le impostazioni e i server MCP dell'utente.
+/// Come lavora Claude Code in background: modello, modalità (piano o modifiche) e, se scelta, un'altra AI via Claudex.
+#[derive(Clone, Default)]
+pub struct Opzioni {
+    /// Alias o nome del modello per --model (vuoto = quello delle impostazioni)
+    pub modello: String,
+    /// "plan" (analizza e propone, non modifica) oppure "acceptEdits"
+    pub modo: String,
+    /// Ambiente per usare un altro provider tramite il proxy di Claudex
+    pub ambiente: Vec<(String, String)>,
+    /// Istruzioni in più per questa esecuzione
+    pub istruzioni: String,
+}
+
 fn comando_headless(bin: &Path, cartella: &Path, messaggio: &str, sessione: Option<&str>, s: &crate::store::Settings) -> tokio::process::Command {
+    comando_headless_con(bin, cartella, messaggio, sessione, s, &Opzioni::default())
+}
+
+pub(crate) fn comando_headless_con(bin: &Path, cartella: &Path, messaggio: &str, sessione: Option<&str>, s: &crate::store::Settings, o: &Opzioni) -> tokio::process::Command {
     let mut consentiti: Vec<String> = CONSENTITI.iter().map(|x| x.to_string()).collect();
     // Gli strumenti dei server MCP noti (in Claude Code o collegati qui) sono consentiti
     let mut server: Vec<String> = crate::mcp_client::nomi_claude_code();
@@ -82,15 +99,22 @@ fn comando_headless(bin: &Path, cartella: &Path, messaggio: &str, sessione: Opti
     cmd.current_dir(cartella)
         .arg("-p")
         .arg(messaggio)
-        .args(["--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits"])
+        .args(["--output-format", "stream-json", "--verbose", "--permission-mode", if o.modo.is_empty() { "acceptEdits" } else { &o.modo }])
         .arg("--allowedTools")
         .arg(consentiti.join(","))
         .arg("--disallowedTools")
         .arg(VIETATI.join(","))
         .arg("--append-system-prompt")
-        .arg("Lavori su richiesta dell'utente tramite il suo assistente Oltremare, senza poter fare domande: decidi in modo ragionevole e dichiara le scelte. Non fare push. Alla fine scrivi un riepilogo breve: cosa hai cambiato, come verificarlo, cosa resta da fare.");
-    if !s.claude_code_model.is_empty() && s.claude_code_model != "default" {
-        cmd.args(["--model", &s.claude_code_model]);
+        .arg(format!(
+            "Lavori su richiesta dell'utente tramite il suo assistente Oltremare, senza poter fare domande: decidi in modo ragionevole e dichiara le scelte. Non fare push. Alla fine scrivi un riepilogo breve: cosa hai cambiato, come verificarlo, cosa resta da fare.{}",
+            if o.istruzioni.is_empty() { String::new() } else { format!("\n{}", o.istruzioni) }
+        ));
+    let modello = if !o.modello.is_empty() { o.modello.clone() } else { s.claude_code_model.clone() };
+    if !modello.is_empty() && modello != "default" {
+        cmd.args(["--model", &modello]);
+    }
+    for (k, v) in &o.ambiente {
+        cmd.env(k, v);
     }
     if let Some(sid) = sessione {
         cmd.args(["--resume", sid]);
@@ -301,6 +325,14 @@ pub async fn esegui(nome: &str, input: &Value, radici: &[PathBuf], cancel: &Canc
     match nome {
         "sviluppa" => sviluppa(input, radici, cancel, app, run_id).await,
         "apri_in_editor" => apri_in_editor(input, radici, app).await,
+        "apri_studio" => {
+            let cartella = Some(str_arg(input, "cartella").trim()).filter(|x| !x.is_empty()).map(|c| percorsi::espandi(c).to_string_lossy().into_owned());
+            let richiesta = Some(str_arg(input, "richiesta").trim()).filter(|x| !x.is_empty());
+            match crate::studio::apri(app, cartella.as_deref(), richiesta) {
+                Ok(()) => Esito::ok("Studio aperto: l'utente continua lì.", json!({ "kind": "text", "text": "Studio aperto" })),
+                Err(e) => Esito::errore(e.to_string()),
+            }
+        }
         "editor_claude_scrivi" => scrivi_a_claude(input, radici, app).await,
         "editor_claude_stato" => claude_stato(input, radici, cancel, app, run_id).await,
         "avvia_processo" | "processi" | "log_processo" | "ferma_processo" => super::processi::esegui(nome, input, radici).await,
@@ -331,7 +363,7 @@ fn cartella_sessioni(progetto: &Path) -> Option<PathBuf> {
 }
 
 /// Conversazioni del progetto, la più recente prima.
-fn sessioni(progetto: &Path) -> Vec<(PathBuf, std::time::SystemTime)> {
+pub(crate) fn sessioni(progetto: &Path) -> Vec<(PathBuf, std::time::SystemTime)> {
     let Some(dir) = cartella_sessioni(progetto) else { return vec![] };
     let mut v: Vec<(PathBuf, std::time::SystemTime)> = std::fs::read_dir(dir)
         .into_iter()
@@ -623,7 +655,7 @@ struct Headless {
 static HEADLESS: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<PathBuf, Headless>>> = std::sync::LazyLock::new(Default::default);
 
 /// Claude Code in background sta lavorando su questo progetto? (Some(true) in corso, Some(false) appena finito)
-fn headless_attivo(cartella: &Path) -> Option<bool> {
+pub(crate) fn headless_attivo(cartella: &Path) -> Option<bool> {
     let m = HEADLESS.lock().unwrap_or_else(|e| e.into_inner());
     m.get(cartella).map(|h| h.finito.lock().map(|f| f.is_none()).unwrap_or(false))
 }
@@ -655,12 +687,16 @@ pub fn ferma_tutti_headless() {
 }
 
 async fn avvia_headless(app: &AppHandle, cartella: &Path, messaggio: &str, sessione: Option<String>) -> Result<String, String> {
+    avvia_headless_con(app, cartella, messaggio, sessione, Opzioni::default()).await
+}
+
+pub async fn avvia_headless_con(app: &AppHandle, cartella: &Path, messaggio: &str, sessione: Option<String>, o: Opzioni) -> Result<String, String> {
     if headless_attivo(cartella) == Some(true) {
-        return Err("Claude sta già lavorando su questo progetto in Oltremare: aspetta che finisca (editor_claude_stato) o fermalo dalla vista Sviluppo.".into());
+        return Err("Claude sta già lavorando su questo progetto: aspetta che finisca o fermalo.".into());
     }
     let s = app.state::<App>().store.settings();
     let bin = crate::providers::claude_code::trova(&s.claude_code_path).ok_or("Claude Code non è installato su questo computer (claude.com/download)")?;
-    let mut cmd = comando_headless(&bin, cartella, messaggio, sessione.as_deref(), &s);
+    let mut cmd = comando_headless_con(&bin, cartella, messaggio, sessione.as_deref(), &s, &o);
     #[cfg(unix)]
     cmd.process_group(0);
     let mut figlio = cmd.spawn().map_err(|e| format!("Non riesco ad avviare Claude Code: {e}"))?;
