@@ -94,8 +94,18 @@
   </div>
   <label class="check">
     <input type="checkbox" checked={s.companion} onchange={(e) => api.companionSet((e.target as HTMLInputElement).checked).catch((err) => ui.toast(errorText(err), "error"))} />
-    <span><strong>Compagno sullo schermo</strong><small>L'avatar in una finestrella sempre in primo piano: clic per parlare, doppio clic per aprire Oltremare.</small></span>
+    <span><strong>Compagno sullo schermo</strong><small>Oltremare sempre visibile, anche quando la finestra è chiusa.</small></span>
   </label>
+  {#if s.companion}
+    <div class="seg" role="radiogroup" aria-label="Stile del compagno">
+      <button role="radio" aria-checked={s.companionStyle !== "floating"} class:on={s.companionStyle !== "floating"} onclick={() => settings.save({ companionStyle: "island" })}>
+        <strong>Isola</strong><small>una pillola in alto, attorno alla notch, che si allarga quando ascolta, lavora o chiede</small>
+      </button>
+      <button role="radio" aria-checked={s.companionStyle === "floating"} class:on={s.companionStyle === "floating"} onclick={() => settings.save({ companionStyle: "floating" })}>
+        <strong>Avatar</strong><small>il volto in una finestrella da trascinare: clic per parlare, doppio clic per aprire</small>
+      </button>
+    </div>
+  {/if}
   <label class="check">
     <input type="checkbox" checked={s.autostart} onchange={(e) => api.autostartSet((e.target as HTMLInputElement).checked).catch((err) => ui.toast(errorText(err), "error"))} />
     <span><strong>Apri all'accensione</strong><small>Parte nella barra dei menu, senza finestra: pronto per voce, briefing e agenti programmati.</small></span>

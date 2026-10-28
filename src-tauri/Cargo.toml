@@ -73,6 +73,12 @@ axum = { version = "0.8", default-features = false, features = ["http1", "json",
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+# L'isola attorno alla notch: livello della finestra e misure dello schermo
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSScreen", "NSWindow", "NSResponder", "NSGraphics"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry"] }
+
 # Binario il più piccolo possibile
 [profile.release]
 codegen-units = 1

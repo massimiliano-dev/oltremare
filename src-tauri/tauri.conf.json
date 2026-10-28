@@ -54,6 +54,22 @@
         "shadow": false,
         "center": true,
         "visibleOnAllWorkspaces": true
+      },
+      {
+        "label": "isola",
+        "title": "Oltremare",
+        "url": "index.html?view=island",
+        "width": 260,
+        "height": 34,
+        "visible": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "focus": false,
+        "visibleOnAllWorkspaces": true
       }
     ],
     "security": {

@@ -76,6 +76,8 @@ pub struct Settings {
     pub editor_app: String,
     /// Dove lavora lo Sviluppatore: "editor" (pannello di Claude nell'editor, con ripiego in Oltremare) o "oltremare"
     pub dev_mode: String,
+    /// Stile del compagno: "floating" (avatar trascinabile) o "island" (pillola in alto, attorno alla notch)
+    pub companion_style: String,
     /// Aspetto
     pub accent_hue: f64,
     pub accent_chroma: f64,
@@ -142,6 +144,7 @@ impl Default for Settings {
             mcp_servers: vec![],
             editor_app: String::new(),
             dev_mode: "editor".into(),
+            companion_style: "island".into(),
             accent_hue: 275.0,
             accent_chroma: 0.2,
             density: "comfortable".into(),

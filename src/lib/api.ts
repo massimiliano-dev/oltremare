@@ -135,6 +135,7 @@ export interface Settings {
   mcpServers: McpServer[];
   editorApp: string;
   devMode: "editor" | "oltremare";
+  companionStyle: "island" | "floating";
 }
 
 export interface DevEntry {
@@ -449,6 +450,8 @@ export const api = {
   voiceSpeak: (text: string) => invoke<void>("voice_speak", { text }),
   voiceStop: () => invoke<void>("voice_stop"),
   voiceHotkeySet: (hotkey: string) => invoke<void>("voice_hotkey_set", { hotkey }),
+  islandInfo: () => invoke<{ present: boolean; width: number; height: number }>("island_info"),
+  islandResize: (width: number, height: number) => invoke<void>("island_resize", { width, height }),
   companionSet: (visible: boolean) => invoke<void>("companion_set", { visible }),
   mainShow: () => invoke<void>("main_show"),
   permissions: () => invoke<Permissions>("permissions_status"),

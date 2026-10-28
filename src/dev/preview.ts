@@ -34,7 +34,7 @@ let settings: Settings = {
   quietFrom: "22:00", quietTo: "07:30", briefingEnabled: true, briefingTime: "08:00", briefingDays: [1, 2, 3, 4, 5],
   accentHue: 275, accentChroma: 0.2, density: "comfortable", fontScale: 1, paletteHotkey: "Alt+Space", autostart: false, layout: "operator",
   mcpServers: [{ id: "m1", name: "issue", kind: "http", url: "https://issue.example.com/api/mcp", headersHelper: 'cat "$HOME/.issue/headers.json"', command: "", args: [], enabled: true }],
-  editorApp: "", devMode: "editor",
+  editorApp: "", devMode: "editor", companionStyle: "island",
 };
 const keys = { anthropic: scenario !== "empty", openai: scenario !== "empty" };
 
@@ -228,6 +228,8 @@ export function installPreview() {
           return [now + 3600_000, now + 86400_000, now + 2 * 86400_000];
         case "hotkey_check":
           return null;
+        case "island_info":
+          return { present: true, width: 186, height: 32 };
         case "dev_projects":
           return ["/Users/demo/Sviluppo/negozio"];
         case "dev_open":

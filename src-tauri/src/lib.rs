@@ -6,6 +6,7 @@ mod db;
 mod dev;
 mod error;
 mod finestre;
+mod isola;
 mod mcp;
 mod mcp_client;
 mod permessi;
@@ -678,13 +679,7 @@ fn companion_set(handle: AppHandle, visible: bool) -> Result<()> {
 
 pub fn imposta_compagno(handle: &AppHandle, visible: bool) -> Result<()> {
     let app = handle.state::<App>();
-    if let Some(w) = handle.get_webview_window("companion") {
-        if visible {
-            let _ = w.show();
-        } else {
-            let _ = w.hide();
-        }
-    }
+    applica_compagno(handle, visible, &app.store.settings().companion_style);
     let mut s = app.store.settings();
     s.companion = visible;
     app.store.save_settings(&s)?;
@@ -704,6 +699,29 @@ pub fn mostra_principale(app: &AppHandle) {
         let _ = w.show();
         let _ = w.set_focus();
     }
+}
+
+/// Mostra il compagno nello stile scelto: avatar flottante o isola in alto.
+pub fn applica_compagno(handle: &AppHandle, visible: bool, stile: &str) {
+    let isola = stile == "island";
+    if let Some(w) = handle.get_webview_window("companion") {
+        if visible && !isola {
+            let _ = w.show();
+        } else {
+            let _ = w.hide();
+        }
+    }
+    isola::mostra(handle, visible && isola);
+}
+
+#[tauri::command]
+fn island_info(handle: AppHandle) -> isola::Notch {
+    isola::notch(&handle)
+}
+
+#[tauri::command]
+fn island_resize(handle: AppHandle, width: f64, height: f64) {
+    isola::dimensiona(&handle, width.clamp(60.0, 900.0), height.clamp(20.0, 600.0));
 }
 
 // ---------- Voce ----------
@@ -841,9 +859,10 @@ pub fn run() {
                 let h = app.handle().clone();
                 tauri::async_runtime::spawn(async move { mcp_client::ricarica(&h).await });
             }
-            if app.state::<App>().store.settings().companion {
-                if let Some(w) = app.get_webview_window("companion") {
-                    let _ = w.show();
+            {
+                let s = app.state::<App>().store.settings();
+                if s.companion {
+                    applica_compagno(app.handle(), true, &s.companion_style);
                 }
             }
             // Scorciatoie globali, icona nella barra dei menu, finestra principale (non all'avvio automatico)
@@ -915,6 +934,8 @@ pub fn run() {
             voice_stop,
             voice_hotkey_set,
             companion_set,
+            island_info,
+            island_resize,
             permissions_status,
             browser_status,
             accounts_list,

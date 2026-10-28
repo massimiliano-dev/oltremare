@@ -262,6 +262,9 @@ pub fn impostazioni_cambiate(app: &AppHandle, prima: &Settings, dopo: &Settings)
     if prima.palette_hotkey != dopo.palette_hotkey || prima.voice_hotkey != dopo.voice_hotkey {
         registra_scorciatoie(app);
     }
+    if prima.companion_style != dopo.companion_style && dopo.companion {
+        crate::applica_compagno(app, true, &dopo.companion_style);
+    }
     if prima.autostart != dopo.autostart {
         let _ = imposta_avvio(app, dopo.autostart);
     }
