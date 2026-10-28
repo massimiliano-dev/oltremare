@@ -3,6 +3,7 @@
   // A riposo è piccola; si allarga quando ascolta, lavora, parla, chiede o avvisa.
   import { onMount } from "svelte";
   import Icon from "./lib/Icon.svelte";
+  import Personaggio from "./lib/avatar/Personaggio.svelte";
   import { api, type Agent, type ApprovalRequest, type AvatarState, type Notifica } from "./lib/api";
   import { on } from "./lib/events";
 
@@ -33,6 +34,9 @@
     : hovering ? "hover"
     : "idle",
   );
+
+  /** Quando l'isola è aperta il robottino passa dall'ala al contenuto, più grande */
+  const open = $derived(mode !== "idle" && mode !== "hover");
 
   // Misure della pillola per ogni modo (in punti). Con la notch la prima riga resta libera per la fotocamera.
   const top = $derived(notch.present ? notch.height : 0);
@@ -149,7 +153,7 @@
   >
     <!-- Ali ai lati della notch: sempre visibili -->
     <div class="wings" style="height:{notch.present ? notch.height : 34}px">
-      <span class="orb s-{mood}" style="--lv:{level}"></span>
+      <span class="bot" class:hidden={open}><Personaggio mood={mood} {level} size={notch.present ? Math.min(28, notch.height - 2) : 28} track={false} /></span>
       <span class="status">
         {#if mode === "listening"}<span class="rec"></span>
         {:else if mode === "thinking"}<span class="spin"></span>
@@ -161,6 +165,7 @@
     </div>
 
     <div class="body">
+      {#if open}<span class="bigbot"><Personaggio mood={mood} {level} size={44} track={false} /></span>{/if}
       {#if mode === "listening"}
         <div class="row">
           <span class="wave">{#each bars as b, i (i)}<i style="transform:scaleY({b})"></i>{/each}</span>
@@ -248,6 +253,31 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 14px;
+  }
+  .bot {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    margin-left: -4px;
+    transition: opacity 0.2s, transform 0.3s cubic-bezier(0.32, 1.25, 0.55, 1);
+  }
+  .bot.hidden {
+    opacity: 0;
+    transform: scale(0.6) translateY(6px);
+  }
+  .bigbot {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 44px;
+    margin: 0 10px 0 -6px;
+    animation: pop 0.38s cubic-bezier(0.32, 1.35, 0.55, 1) both;
+  }
+  @keyframes pop {
+    from {
+      transform: scale(0.5) translateY(-10px);
+      opacity: 0;
+    }
   }
   .orb {
     width: 16px;
@@ -340,7 +370,7 @@
   }
   .pill:not(.notch) .body {
     top: 0;
-    padding-left: 44px;
+    padding-left: 14px;
   }
   .pill:not(.notch).m-asking .body,
   .pill:not(.notch).m-hover .body {
@@ -449,7 +479,32 @@
     .pill {
       transition: none;
     }
-    .orb {
+    .bot {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    margin-left: -4px;
+    transition: opacity 0.2s, transform 0.3s cubic-bezier(0.32, 1.25, 0.55, 1);
+  }
+  .bot.hidden {
+    opacity: 0;
+    transform: scale(0.6) translateY(6px);
+  }
+  .bigbot {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 44px;
+    margin: 0 10px 0 -6px;
+    animation: pop 0.38s cubic-bezier(0.32, 1.35, 0.55, 1) both;
+  }
+  @keyframes pop {
+    from {
+      transform: scale(0.5) translateY(-10px);
+      opacity: 0;
+    }
+  }
+  .orb {
       animation: none;
     }
   }
