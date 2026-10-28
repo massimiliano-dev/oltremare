@@ -1,8 +1,23 @@
+# Dipendenze e build
 node_modules
 dist
 src-tauri/target
 src-tauri/gen
-.DS_Store
+
+# Configurazione locale e segreti (gli ID OAuth vanno in config.toml, mai su git)
 src-tauri/.cargo/config.toml
 .env
-.env.local
+.env.*
+*.pem
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Sistema, editor, log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+*.tmp

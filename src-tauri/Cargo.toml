@@ -3,6 +3,7 @@ name = "oltremare"
 version = "0.1.0"
 description = "Oltremare — assistente personale con agenti che lavorano al posto tuo"
 edition = "2021"
+license = "MIT"
 rust-version = "1.88"
 
 [lib]

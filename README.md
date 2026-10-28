@@ -210,3 +210,7 @@ src/
 - La parola di attivazione usa la trascrizione: in ambienti rumorosi conviene il tasto.
 - La build per Windows va fatta e provata su Windows (o in CI); l'installer non firmato fa scattare SmartScreen.
 - I modelli locali piccoli usano gli strumenti meno bene dei modelli grandi.
+
+## Licenza
+
+[MIT](LICENSE). Modelli, voci e motori scaricati al primo uso (llama.cpp, modelli GGUF, Whisper, Piper, sherpa-onnx) restano sotto le rispettive licenze, indicate nelle loro pagine.
