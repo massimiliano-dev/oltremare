@@ -14,7 +14,10 @@ if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
 fi
 export APPLE_SIGNING_IDENTITY
 
-npm run tauri build -- --bundles app
+# --solo-installa: usa la build già pronta, senza ricompilare
+if [ "${1:-}" != "--solo-installa" ]; then
+  npm run tauri build -- --bundles app
+fi
 
 APP="src-tauri/target/release/bundle/macos/Oltremare.app"
 codesign --verify --deep --strict "$APP"
