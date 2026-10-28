@@ -44,6 +44,8 @@
       await Promise.all([agents.init(), settings.checkClaudeCode()]);
       await agents.adoptSubscription();
       if (agents.selected) await runs.selectAgent(agents.selected.id);
+      // Lo Sviluppatore si riapre nella sua vista
+      if (agents.selected?.id === "sviluppatore") ui.view = "dev";
     } catch (e) {
       ui.toast(errorText(e), "error");
     } finally {
@@ -120,7 +122,9 @@
     }
     if (mod && e.shiftKey && k === "d") {
       e.preventDefault();
-      ui.view = ui.view === "dev" ? "chat" : "dev";
+      if (ui.view === "dev") ui.view = "chat";
+      else if (agents.byId("sviluppatore")) agents.select("sviluppatore");
+      else ui.view = "dev";
       return;
     }
     if (mod && k === "b") {

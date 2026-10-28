@@ -5,6 +5,8 @@ import { ui } from "./ui.svelte";
 import { runs } from "./runs.svelte";
 
 const LAST = "oltremare:agent";
+/** L'agente che lavora nella vista Sviluppo */
+export const DEV_AGENT = "sviluppatore";
 
 export const AGENT_ICONS = [
   "spark", "bolt", "chat", "bulb", "folder", "mail", "calendar", "globe", "terminal", "cpu", "book", "briefcase",
@@ -47,6 +49,8 @@ class AgentsState {
   }
 
   select(id: string) {
+    // Lo Sviluppatore lavora nella vista Sviluppo; gli altri agenti nella chat
+    ui.view = id === DEV_AGENT ? "dev" : "chat";
     if (id === this.selected?.id) return;
     this.selectedId = id;
     try {

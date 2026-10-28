@@ -7,6 +7,8 @@
   import { settings } from "../state/settings.svelte";
   import { ui } from "../state/ui.svelte";
   import { markdown } from "../markdown";
+  import ChatPanel from "../panels/ChatPanel.svelte";
+  import { agents } from "../state/agents.svelte";
 
   let text = $state("");
   let here = $state(settings.s?.devMode === "oltremare");
@@ -14,6 +16,8 @@
   let chat: HTMLElement | undefined = $state();
   let frame: HTMLIFrameElement | undefined = $state();
   let showProjects = $state(false);
+  /** Colonna destra: la conversazione con lo Sviluppatore, oppure quella di Claude sul progetto */
+  let side = $state<"agent" | "claude">("agent");
 
   const name = $derived(dev.folder?.split(/[\\/]/).filter(Boolean).pop() ?? "Nessun progetto");
   const items = $derived(dev.session?.items ?? []);
@@ -78,7 +82,7 @@
       {#if dev.git?.changes?.length}
         <button class="btn btn-quiet sm" onclick={() => dev.showDiff()}>{dev.git.changes.length} file cambiati</button>
       {/if}
-      <button class="btn btn-line sm" onclick={() => (ui.view = "chat")}><Icon name="chat" size={13} /> Torna alla chat</button>
+      <button class="btn btn-line sm" onclick={() => (ui.view = "chat")} title="Torna alla chat e agli altri agenti"><Icon name="chat" size={13} /> Tutti gli agenti</button>
     </div>
   </header>
 
@@ -156,6 +160,15 @@
       </section>
 
       <section class="claude">
+        <div class="sidetabs" role="tablist">
+          <button role="tab" aria-selected={side === "agent"} class:on={side === "agent"} onclick={() => (side = "agent")}>{agents.selected?.name ?? "Sviluppatore"}</button>
+          <button role="tab" aria-selected={side === "claude"} class:on={side === "claude"} onclick={() => (side = "claude")}>
+            Claude sul progetto{#if dev.session?.running}<span class="pulse"></span>{/if}
+          </button>
+        </div>
+        {#if side === "agent"}
+          <div class="agentchat"><ChatPanel /></div>
+        {:else}
         <div class="chead">
           <strong>Claude</strong>
           {#if dev.session?.running}<span class="live"><span class="pulse"></span>{dev.session.stuck ? "fermo: forse aspetta un permesso" : "al lavoro"}</span>{/if}
@@ -196,6 +209,7 @@
             <button class="btn btn-primary sm" onclick={() => send()} disabled={!text.trim() || dev.sending}>{dev.sending ? "Invio…" : "Invia"}</button>
           </div>
         </div>
+        {/if}
       </section>
     </div>
   {/if}
@@ -301,7 +315,7 @@
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: 250px minmax(0, 1fr) 400px;
+    grid-template-columns: 250px minmax(0, 1fr) 460px;
   }
   .tree {
     overflow: auto;
@@ -497,6 +511,36 @@
     flex-direction: column;
     border-left: 1px solid var(--rule-soft);
   }
+  .sidetabs {
+    display: flex;
+    gap: 2px;
+    padding: 6px 8px 0;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .sidetabs button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: var(--t-sm);
+    color: var(--ink-3);
+    border-radius: 6px 6px 0 0;
+  }
+  .sidetabs button.on {
+    color: var(--ink);
+    background: var(--paper-2);
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+  .agentchat {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .agentchat :global(> *) {
+    flex: 1;
+    min-height: 0;
+  }
   .chead {
     display: flex;
     align-items: center;
@@ -636,7 +680,7 @@
   }
   @media (max-width: 1200px) {
     .grid {
-      grid-template-columns: 210px minmax(0, 1fr) 340px;
+      grid-template-columns: 200px minmax(0, 1fr) 380px;
     }
   }
 </style>

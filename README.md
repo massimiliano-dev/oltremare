@@ -102,7 +102,8 @@ Microsoft 365 e Outlook.com tramite Microsoft Graph, Gmail e Google tramite le l
   - «Scrivi a Claude nell'editor» porta in primo piano il progetto in VS Code (o in un'app derivata), scrive il messaggio nel pannello di Claude Code e preme Invio, come faresti tu.
   - «Segui Claude» legge la conversazione salvata da Claude Code e dice cosa sta facendo, se ha finito, se fa una domanda o se è fermo su una richiesta di permesso. Con un'attesa, aspetta la fine senza consumare passi.
   - I permessi nel pannello si danno guardando lo schermo e cliccando, con le stesse regole che useresti tu.
-- **Vista Sviluppo** (`⌘⇧D` o l'icona del terminale in alto): un piccolo IDE dentro Oltremare.
+- **Vista Sviluppo**: è lo spazio di lavoro dello Sviluppatore. Si apre selezionando l'agente, con `⌘⇧D` o con l'icona del terminale in alto; è un piccolo IDE dentro Oltremare.
+  - A destra c'è la conversazione con lo Sviluppatore, che riceve anche il progetto aperto. Accanto c'è quella di Claude sul progetto.
   - Albero dei file, con i file cambiati evidenziati; visualizzatore di file e differenze git.
   - La conversazione di Claude dal vivo, sia nel pannello dell'editor sia in background, con un campo per scrivergli «Nell'editor» o «Qui».
   - I processi con i loro log e l'anteprima dell'app sull'indirizzo locale.
@@ -116,6 +117,10 @@ Microsoft 365 e Outlook.com tramite Microsoft Graph, Gmail e Google tramite le l
   3. avvia backend e frontend e prova nel browser;
   4. riporta a Claude gli errori finché tutto funziona;
   5. riassume il lavoro, senza push.
+
+### Isola
+
+Il compagno può essere un'**isola**: una pillola nera in alto al centro. Sui Mac con la notch le sta attorno, come la Dynamic Island; sugli altri resta appena sotto la barra dei menu. A riposo è piccola. Si allarga con un'animazione quando Oltremare ascolta (onda della voce e trascrizione), lavora (agente e passo in corso) o parla. Si allarga anche quando chiede un'approvazione, con i pulsanti Consenti e Nega, o quando arriva un avviso. Al passaggio del mouse mostra Parla, Chiedi e Apri; un clic apre la palette. Lo stile si sceglie in Impostazioni → Aspetto.
 
 ### Finestre e interfaccia
 - **Icona nella barra dei menu** (area di notifica su Windows): segue lo stato dell'avatar e mostra un segno quando serve la tua attenzione. Dal menu: palette, briefing, compagno, ascolto, ferma tutto, avvio automatico, esci. Chiudere la finestra non spegne Oltremare.

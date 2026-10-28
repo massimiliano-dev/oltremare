@@ -5,6 +5,7 @@ import { on } from "../events";
 import { agents } from "./agents.svelte";
 import { avatar } from "./avatar.svelte";
 import { ui } from "./ui.svelte";
+import { dev } from "./dev.svelte";
 
 const ACTIVE = new Set(["running", "awaitingApproval"]);
 
@@ -116,6 +117,7 @@ class RunsState {
 
   /** Apre un'esecuzione partita altrove (briefing, trigger, voce, palette). */
   async openRun(agentId: string, conversationId: string) {
+    ui.view = agentId === "sviluppatore" ? "dev" : "chat";
     if (agents.selected?.id !== agentId) {
       agents.selectedId = agentId;
       try {
@@ -167,7 +169,9 @@ class RunsState {
     const isNew = this.conversationId === null;
     this.expecting = isNew;
     try {
-      const run = await api.runStart({ agentId: agent.id, conversationId: this.conversationId, text, source: "main", attachments });
+      // Dalla vista Sviluppo lo Sviluppatore sa su quale progetto si sta lavorando
+      const contesto = agent.id === "sviluppatore" && ui.view === "dev" && dev.folder ? `\n\n[Progetto aperto nella vista Sviluppo: ${dev.folder}]` : "";
+      const run = await api.runStart({ agentId: agent.id, conversationId: this.conversationId, text: text + contesto, source: "main", attachments });
       this.byId[run.id] ??= run;
       this.adopt(this.byId[run.id]);
       if (isNew) {

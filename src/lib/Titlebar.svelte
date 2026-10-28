@@ -30,7 +30,7 @@
         <span class="spin"></span> Al lavoro · Ferma
       </button>
     {/if}
-    <button class="icon-btn" class:on={ui.view === "dev"} onclick={() => (ui.view = ui.view === "dev" ? "chat" : "dev")} title="Sviluppo (⌘⇧D)" aria-label="Sviluppo"><Icon name="terminal" size={17} /></button>
+    <button class="icon-btn" class:on={ui.view === "dev"} onclick={() => (ui.view === "dev" ? (ui.view = "chat") : agents.byId("sviluppatore") ? agents.select("sviluppatore") : (ui.view = "dev"))} title="Sviluppo con lo Sviluppatore (⌘⇧D)" aria-label="Sviluppo"><Icon name="terminal" size={17} /></button>
     <button class="icon-btn" onclick={() => (ui.showPalette = true)} title="Comandi (⌘K)" aria-label="Comandi"><Icon name="command" size={17} /></button>
     <button class="icon-btn" onclick={() => ui.openSettings()} title="Impostazioni (⌘,)" aria-label="Impostazioni"><Icon name="settings" size={17} /></button>
   </div>

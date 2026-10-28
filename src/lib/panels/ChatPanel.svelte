@@ -31,6 +31,12 @@
   ];
 
   const agent = $derived(agents.selected);
+  const DEV_SUGGESTIONS = [
+    { icon: "bolt", text: "Prendi la prossima issue assegnata a me e lavoraci" },
+    { icon: "terminal", text: "Avvia il progetto in locale e verifica che funzioni" },
+    { icon: "search", text: "Controlla che i test passino e correggi quelli rotti" },
+    { icon: "globe", text: "Apri l'app nel browser e prova il flusso principale" },
+  ];
   const showThinking = $derived(settings.s?.showThinking ?? true);
 
   function onScroll() {
@@ -103,7 +109,7 @@
             {/if}
           {:else}
             <div class="sugg">
-              {#each SUGGESTIONS as s (s.text)}
+              {#each agent?.id === "sviluppatore" ? DEV_SUGGESTIONS : SUGGESTIONS as s (s.text)}
                 <button onclick={() => composer?.fill(s.text)}><Icon name={s.icon} size={15} /> {s.text}</button>
               {/each}
             </div>
