@@ -1,0 +1,6 @@
+# Copia in config.toml (ignorato da git) e inserisci gli ID delle tue applicazioni OAuth (vedi README → Account).
+# Letti a compile time. Vuoti = accesso con quel provider disattivato.
+[env]
+OLTREMARE_MS_CLIENT_ID = ""
+OLTREMARE_GOOGLE_CLIENT_ID = ""
+OLTREMARE_GOOGLE_CLIENT_SECRET = ""

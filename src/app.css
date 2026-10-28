@@ -1,0 +1,510 @@
+/* Oltremare — carta chiara, inchiostro blu oltremare. Di notte, carta d'inchiostro. */
+
+:root {
+  /* Accento: blu oltremare, più violaceo del cobalto. Ogni tono deriva da questa coppia */
+  --accent-h: 275;
+  --accent-c: 0.2;
+  --tint-h: 272;
+
+  --font-sans: "Instrument Sans Variable", "Instrument Sans", -apple-system, "Segoe UI Variable Text", "Segoe UI", "Noto Sans", sans-serif;
+  --font-serif: "Instrument Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --t-xs: 0.72rem;
+  --t-sm: 0.8125rem;
+  --t-md: 0.875rem;
+  --t-lg: 1rem;
+  --t-xl: 1.25rem;
+  --t-display: clamp(1.9rem, 1.3rem + 1.4vw, 2.6rem);
+
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-ink: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 140ms;
+  --dur: 220ms;
+  --dur-slow: 420ms;
+
+  /* Carta: bianchi appena violacei, mai bianco puro */
+  --paper: oklch(0.993 0.004 var(--tint-h));
+  --paper-2: oklch(0.976 0.011 var(--tint-h));
+  --paper-3: oklch(0.952 0.02 var(--tint-h));
+  --rule: oklch(0.905 0.026 var(--tint-h));
+  --rule-soft: oklch(0.942 0.017 var(--tint-h));
+
+  --ink: oklch(0.24 0.07 var(--tint-h));
+  --ink-2: oklch(0.42 0.06 var(--tint-h));
+  --ink-3: oklch(0.58 0.045 var(--tint-h));
+
+  --accent: oklch(0.48 var(--accent-c) var(--accent-h));
+  --accent-hi: oklch(0.55 calc(var(--accent-c) * 0.95) var(--accent-h));
+  --accent-deep: oklch(0.32 0.16 var(--accent-h));
+  --accent-night: oklch(0.25 0.12 var(--accent-h));
+  --accent-wash: oklch(0.935 0.04 var(--accent-h));
+  --accent-mist: oklch(0.963 0.024 var(--accent-h));
+  --on-accent: oklch(0.985 0.01 var(--accent-h));
+
+  /* Testo sulle superfici blu: sfumature del blu stesso, non grigi */
+  --on-deep: oklch(0.98 0.012 var(--accent-h));
+  --on-deep-2: oklch(0.84 0.06 var(--accent-h));
+  --on-deep-3: oklch(0.68 0.09 var(--accent-h));
+
+  /* Stati: non seguono l'accento, devono restare riconoscibili */
+  --ok: oklch(0.56 0.14 152);
+  --warn: oklch(0.72 0.15 75);
+  --warn-ink: oklch(0.48 0.11 70);
+  --danger: oklch(0.55 0.19 25);
+  --danger-wash: oklch(0.95 0.03 25);
+
+  --focus-ring: oklch(0.48 var(--accent-c) var(--accent-h) / 0.16);
+  --scrim: oklch(0.22 0.09 var(--accent-h) / 0.26);
+  --shadow-sheet: 0 1px 0 oklch(0.9 0.03 var(--tint-h)), 0 24px 60px -18px oklch(0.3 0.12 var(--accent-h) / 0.35),
+    0 8px 20px -10px oklch(0.3 0.12 var(--accent-h) / 0.2);
+  --shadow-card: 0 1px 2px oklch(0.3 0.1 var(--accent-h) / 0.08), 0 0 0 1px var(--rule-soft);
+
+  color-scheme: light;
+  font-family: var(--font-sans);
+  font-size: calc(15px * var(--font-scale, 1));
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01", "cv11";
+  text-rendering: optimizeLegibility;
+}
+
+/* Notte: la carta diventa inchiostro, l'accento si schiarisce per restare leggibile */
+:root[data-theme="dark"] {
+  --paper: oklch(0.175 0.03 var(--tint-h));
+  --paper-2: oklch(0.205 0.034 var(--tint-h));
+  --paper-3: oklch(0.245 0.038 var(--tint-h));
+  --rule: oklch(0.31 0.04 var(--tint-h));
+  --rule-soft: oklch(0.255 0.036 var(--tint-h));
+
+  --ink: oklch(0.94 0.014 var(--tint-h));
+  --ink-2: oklch(0.79 0.03 var(--tint-h));
+  --ink-3: oklch(0.63 0.04 var(--tint-h));
+
+  --accent: oklch(0.7 0.16 var(--accent-h));
+  --accent-hi: oklch(0.76 0.14 var(--accent-h));
+  --accent-deep: oklch(0.42 0.16 var(--accent-h));
+  --accent-night: oklch(0.13 0.05 var(--accent-h));
+  --accent-wash: oklch(0.31 0.08 var(--accent-h));
+  --accent-mist: oklch(0.245 0.055 var(--accent-h));
+  --on-accent: oklch(0.16 0.06 var(--accent-h));
+
+  --warn-ink: oklch(0.82 0.13 80);
+  --danger: oklch(0.68 0.17 25);
+  --danger-wash: oklch(0.27 0.06 25);
+
+  --focus-ring: oklch(0.7 0.16 var(--accent-h) / 0.22);
+  --scrim: oklch(0.05 0.03 var(--accent-h) / 0.5);
+  --shadow-sheet: 0 1px 0 oklch(0.3 0.04 var(--tint-h)), 0 24px 60px -18px oklch(0 0 0 / 0.7);
+  --shadow-card: 0 0 0 1px var(--rule-soft);
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+/* Cambio tema: una dissolvenza breve, solo mentre avviene */
+html.switching * {
+  transition: background-color var(--dur), color var(--dur), border-color var(--dur), box-shadow var(--dur) !important;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: default;
+  border: 0;
+  background: none;
+  padding: 0;
+}
+
+input,
+textarea,
+[contenteditable] {
+  user-select: text;
+  -webkit-user-select: text;
+  caret-color: var(--accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: oklch(0.85 0.09 var(--accent-h) / 0.6);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--rule);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ink-3);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- Primitive ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  height: 32px;
+  padding: 0 0.85rem;
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  font-weight: 550;
+  letter-spacing: 0.005em;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+.btn:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+.btn:disabled {
+  opacity: 0.55;
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.16), 0 1px 2px oklch(0.3 0.15 var(--accent-h) / 0.3);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hi);
+}
+.btn-quiet {
+  color: var(--ink-2);
+}
+.btn-quiet:hover:not(:disabled) {
+  background: var(--accent-mist);
+  color: var(--accent);
+}
+.btn-line {
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  background: var(--paper);
+}
+.btn-line:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 1px var(--accent-wash);
+  background: var(--accent-mist);
+}
+.btn-danger {
+  color: var(--danger);
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger-wash);
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+  transition: background 0.15s, color 0.15s;
+}
+.icon-btn:hover:not(:disabled) {
+  background: var(--accent-mist);
+  color: var(--accent);
+}
+.icon-btn.on {
+  color: var(--accent);
+}
+.icon-btn:disabled {
+  opacity: 0.4;
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+.field > span {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.input {
+  height: 38px;
+  padding: 0 0.75rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  width: 100%;
+}
+textarea.input {
+  height: auto;
+  padding: 0.6rem 0.75rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+.help {
+  font-size: var(--t-xs);
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+.err {
+  font-size: var(--t-xs);
+  color: var(--danger);
+}
+.link {
+  color: var(--accent);
+  font-weight: 600;
+}
+.link:hover {
+  text-decoration: underline;
+}
+
+kbd {
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  font-weight: 600;
+  min-width: 1.35rem;
+  height: 1.25rem;
+  padding: 0 0.3rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--ink-3);
+  background: var(--paper-2);
+  box-shadow: inset 0 -1px 0 var(--rule), inset 0 0 0 1px var(--rule-soft);
+}
+
+.eyebrow {
+  font-size: var(--t-xs);
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* Segmentato a schede, come in Cobalto */
+.seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 8px;
+}
+.seg > button {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  text-align: left;
+  box-shadow: inset 0 0 0 1px var(--rule);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.seg > button:hover:not(:disabled) {
+  background: var(--accent-mist);
+}
+.seg > button.on {
+  background: var(--accent-mist);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.seg > button:disabled {
+  opacity: 0.5;
+}
+.seg strong {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 1.25rem;
+  line-height: 1.05;
+  color: var(--ink);
+}
+.seg small {
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+}
+
+/* Testo generato: markdown leggero */
+.md {
+  user-select: text;
+  -webkit-user-select: text;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.md > :first-child {
+  margin-top: 0;
+}
+.md > :last-child {
+  margin-bottom: 0;
+}
+.md p {
+  margin: 0 0 0.7em;
+}
+.md ul,
+.md ol {
+  margin: 0 0 0.7em;
+  padding-left: 1.3em;
+}
+.md li {
+  margin: 0.15em 0;
+}
+.md li::marker {
+  color: var(--accent);
+}
+.md h3,
+.md h4 {
+  margin: 1em 0 0.4em;
+  font-size: var(--t-md);
+  font-weight: 650;
+}
+.md strong {
+  font-weight: 650;
+}
+.md a {
+  color: var(--accent);
+}
+.md code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 0.08em 0.35em;
+  border-radius: 4px;
+  background: var(--paper-3);
+}
+.md pre {
+  margin: 0 0 0.8em;
+  padding: 0.8em 1em;
+  border-radius: var(--r-md);
+  background: var(--paper-2);
+  box-shadow: inset 0 0 0 1px var(--rule-soft);
+  overflow-x: auto;
+  font-size: 0.84em;
+  line-height: 1.5;
+}
+.md pre code {
+  padding: 0;
+  background: none;
+}
+.md blockquote {
+  margin: 0 0 0.7em;
+  padding-left: 0.9em;
+  border-left: 2px solid var(--accent-wash);
+  color: var(--ink-2);
+}
+.md hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 1em 0;
+}
+/* Cursore dell'inchiostro mentre l'assistente scrive */
+.md.streaming > :last-child::after,
+.md.streaming:empty::after {
+  content: "";
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.12em;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: caret 1s steps(2) infinite;
+}
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--paper-2) 25%, var(--paper-3) 37%, var(--paper-2) 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: 4px;
+}
+
+/* Movimento ridotto: niente spostamenti, restano le dissolvenze che spiegano lo stato */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes settle {
+    from {
+      opacity: 0;
+    }
+  }
+  .skeleton {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------- Densità compatta ---------- */
+[data-density="compact"] {
+  --t-sm: 0.78rem;
+  --t-md: 0.84rem;
+}
+[data-density="compact"] .btn {
+  height: 28px;
+  padding: 0 0.7rem;
+}
+[data-density="compact"] .input {
+  height: 32px;
+}
+[data-density="compact"] .md p {
+  margin: 0.35em 0;
+}

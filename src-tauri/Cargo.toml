@@ -1,0 +1,81 @@
+[package]
+name = "oltremare"
+version = "0.1.0"
+description = "Oltremare — assistente personale con agenti che lavorano al posto tuo"
+edition = "2021"
+rust-version = "1.88"
+
+[lib]
+name = "oltremare_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png", "protocol-asset"] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-autostart = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "net", "time", "fs", "process", "io-util"] }
+tokio-util = "0.7"
+futures = "0.3"
+bytes = "1"
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "stream", "charset", "http2"] }
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
+thiserror = "2"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+regex = "1"
+# Allegati: fogli di calcolo e documenti Office diventano testo
+calamine = "0.37"
+zip = "9"
+# AI locale: download verificati ed estrazione del motore llama.cpp
+sha2 = "0.11.1"
+flate2 = "1"
+tar = "0.4"
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+# Voce: microfono, parola di attivazione, riconoscimento e sintesi locali
+cpal = "0.18"
+rodio = { version = "0.23", default-features = false, features = ["playback"] }
+sherpa-rs = { version = "0.6", default-features = false, features = ["download-binaries", "tts", "static"] }
+hound = "3.5"
+bzip2 = "0.6"
+# Controllo dello schermo
+xcap = "0.9"
+enigo = "0.6"
+image = { version = "0.25", default-features = false, features = ["png"] }
+# Browser (Chrome/Edge con il protocollo DevTools)
+chromiumoxide = "0.9"
+# Posta Google: messaggi RFC 822
+mail-parser = "0.11"
+mail-builder = "0.4"
+# Notifiche di macOS (plist binari)
+plist = "1"
+# Pianificazione (espressioni cron) e cartelle osservate
+cron = "0.15"
+notify = "8"
+# Strumenti sul computer
+similar = "2"
+trash = "5"
+arboard = "3"
+# Server MCP locale per gli strumenti con Claude Code
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# Binario il più piccolo possibile
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
