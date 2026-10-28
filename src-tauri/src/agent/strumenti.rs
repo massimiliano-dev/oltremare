@@ -200,6 +200,13 @@ pub async fn chiama(ctx: &ContestoRun, nome: &str, input: Value, toolset: Option
     st.avatar.set(&ctx.app, &ctx.run_id, Volto::Working);
     let esito = match azione {
         Some(a) => {
+            // Mouse e tastiera sono dell'utente: si usano solo quando li ha lasciati da un po'
+            if computer::agisce(&a) && st.store.settings().computer_wait_idle {
+                if let Err(e) = attendi_utente_via(ctx).await {
+                    chiudi(&mut passo, "error", &e, "allow", da);
+                    return e;
+                }
+            }
             let cartella = ctx.app.path().app_cache_dir().ok().map(|d| d.join("schermate").join(&ctx.run_id));
             computer::schermo().esegui(a, cartella).await
         }
@@ -208,6 +215,7 @@ pub async fn chiama(ctx: &ContestoRun, nome: &str, input: Value, toolset: Option
         None if spec.categoria.starts_with("mcp:") => crate::mcp_client::chiama(&ctx.app, nome, &input, &ctx.cancel).await,
         None if spec.categoria == "dev" => tools::sviluppo::esegui(nome, &input, &ctx.radici, &ctx.cancel, &ctx.app, &ctx.run_id).await,
         None if spec.categoria == "browser" => {
+            tools::browser::imposta_visibile(st.store.settings().browser_visible);
             let profilo = st.data_dir.join("browser");
             let cartella = ctx.app.path().app_cache_dir().ok().map(|d| d.join("schermate").join(&ctx.run_id));
             tools::browser::esegui(nome, &input, &profilo, &ctx.agent.browser_domains, cartella).await
@@ -274,6 +282,30 @@ fn notifiche(ctx: &ContestoRun, nome: &str, input: &Value) -> Esito {
                 ),
                 Err(e) => Esito::errore(e.to_string()),
             }
+        }
+    }
+}
+
+/// Aspetta che l'utente lasci mouse e tastiera (al massimo il tempo di approvazione dell'agente).
+async fn attendi_utente_via(ctx: &ContestoRun) -> Result<(), Esito> {
+    const SOGLIA: f64 = 12.0;
+    if computer::utente_inattivo_da() >= SOGLIA {
+        return Ok(());
+    }
+    let limite = std::time::Duration::from_secs(ctx.agent.policy.approval_timeout_s.clamp(30, 1800) as u64);
+    let inizio = std::time::Instant::now();
+    let _ = ctx.app.emit("run-progress", json!({ "runId": ctx.run_id, "text": "Aspetto che tu lasci mouse e tastiera per usare lo schermo" }));
+    loop {
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(2)) => {}
+            _ = ctx.cancel.cancelled() => return Err(Esito::errore("Esecuzione fermata")),
+        }
+        if computer::utente_inattivo_da() >= SOGLIA {
+            let _ = ctx.app.emit("run-progress", json!({ "runId": ctx.run_id, "text": "Uso lo schermo: non toccare mouse e tastiera" }));
+            return Ok(());
+        }
+        if inizio.elapsed() > limite {
+            return Err(Esito::errore("L'utente sta usando il computer da troppo tempo: non ho potuto usare lo schermo. Prova un'altra strada (automazione_app, browser, file) o chiedigli quando puoi farlo."));
         }
     }
 }

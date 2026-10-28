@@ -136,6 +136,8 @@ export interface Settings {
   editorApp: string;
   devMode: "editor" | "oltremare";
   companionStyle: "island" | "floating";
+  browserVisible: boolean;
+  computerWaitIdle: boolean;
 }
 
 export interface DevEntry {

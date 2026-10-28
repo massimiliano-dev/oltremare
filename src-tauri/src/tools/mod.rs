@@ -222,6 +222,13 @@ Scrivi una richiesta completa: obiettivo, vincoli, come verificare. Per continua
         schema: || obj(&[("percorso", s(P)), ("riga", i("Riga a cui posizionarsi (facoltativa)"))], &["percorso"]),
     },
     ToolSpec {
+        nome: "automazione_app", etichetta: "Comandare le app (AppleScript)", categoria: "apps", rischio: Rischio::Danger, parallelo: false, input_grande: true,
+        descrizione: "Comanda le app del Mac senza usare mouse e schermo, in background: AppleScript o JavaScript for Automation (osascript). \
+Funziona con Note, Promemoria, Calendario, Mail, Finder, Safari, Numbers, Pages, Keynote, Excel, Word, Musica e molte altre. \
+Preferiscilo al controllo dello schermo. Non usare «System Events» per digitare tasti: interferisce con l'utente.",
+        schema: || obj(&[("script", s("Lo script")), ("linguaggio", e("Linguaggio dello script", &["applescript", "javascript"]))], &["script"]),
+    },
+    ToolSpec {
         nome: "editor_claude_scrivi", etichetta: "Scrivere a Claude nell'editor", categoria: "dev", rischio: Rischio::Write, parallelo: false, input_grande: true,
         descrizione: "Lavora come l'utente: porta in primo piano il progetto nell'editor, scrive il messaggio nel pannello di Claude Code e preme Invio. \
 Continua l'ultima conversazione del progetto (o quella indicata), oppure ne apre una nuova. Claude nel pannello legge il codice, lo modifica, esegue comandi e usa i server MCP \
@@ -512,6 +519,7 @@ pub async fn esegui(nome: &str, input: &Value, amb: &Ambiente) -> Esito {
         }
         "esegui_comando" => shell::esegui(input, &amb.radici, &amb.cancel).await,
         "apri_app" | "apri_percorso" | "apri_url" => apps::esegui(nome, input, amb).await,
+        "automazione_app" => apps::automazione(input, &amb.cancel).await,
         "leggi_appunti" | "scrivi_appunti" => {
             let (nome, input) = (nome.to_string(), input.clone());
             tokio::task::spawn_blocking(move || appunti::esegui(&nome, &input)).await.unwrap_or_else(|e| Esito::errore(e.to_string()))
@@ -585,6 +593,13 @@ pub fn titolo(nome: &str, input: &Value) -> String {
         "web_invia_form" => "Invia il modulo".into(),
         "web_indietro" => "Torna indietro".into(),
         "apri_app" => format!("Apre {}", a("nome")),
+        "automazione_app" => {
+            let app = regex::Regex::new(r#"(?i)(?:tell application|Application\()\s*["']([^"']+)"#).ok().and_then(|r| r.captures(a("script")).map(|c| c[1].to_string()));
+            match app {
+                Some(n) => format!("Comanda {n}"),
+                None => "Esegue un'automazione".into(),
+            }
+        }
         "apri_percorso" => format!("Apre {}", breve(a("percorso"))),
         "apri_url" => format!("Apre {}", a("url")),
         "leggi_appunti" => "Legge gli appunti".into(),
@@ -609,6 +624,7 @@ pub fn anteprima(nome: &str, input: &Value, radici: &[PathBuf]) -> (String, Opti
     match nome {
         "scrivi_file" => fs::anteprima_scrittura(input, radici),
         "esegui_comando" => (a("comando").to_string(), None),
+        "automazione_app" => (a("script").chars().take(3000).collect(), None),
         "sposta_file" => (format!("{} → {}", a("da"), a("a")), None),
         "scrivi_appunti" => (a("testo").chars().take(400).collect(), None),
         "mail_invia" | "mail_bozza" => (format!("A: {}{}\nOggetto: {}\n\n{}", a("a"), if a("cc").is_empty() { String::new() } else { format!("\nCc: {}", a("cc")) }, a("oggetto"), a("testo")), None),

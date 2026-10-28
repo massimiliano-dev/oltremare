@@ -44,12 +44,14 @@ Se non c'è nessuna chiave API ma Claude Code è collegato, gli agenti passano d
 ### Strumenti sul computer
 - **File**: leggere, elencare, cercare, scrivere, spostare. Si cestina, non si cancella mai. Si lavora solo nelle cartelle consentite; chiavi, portachiavi e cartelle di sistema restano sempre escluse.
 - **Comandi**: zsh su macOS, PowerShell su Windows. Hanno un tempo massimo, l'uscita limitata e un elenco di comandi vietati.
+- **App senza schermo**: gli agenti comandano le app del Mac con AppleScript o JavaScript for Automation, in background e senza muovere il mouse. Funziona con Note, Promemoria, Calendario, Mail, Finder, Safari, Numbers, Excel e molte altre. Lo script si approva prima che parta.
 - **App, link e appunti**.
-- **Schermo** (computer use):
+- **Schermo** (computer use), solo come ultima risorsa:
+  - aspetta che tu lasci mouse e tastiera da qualche secondo (si può spegnere in Impostazioni → Generale);
   - con Claude usa il toolset nativo, con GPT e i modelli locali delle funzioni equivalenti;
   - si ferma se muovi il mouse;
   - non tocca le app di password e banca.
-- **Browser**: Chrome o Edge con un profilo separato dal tuo. Lavora su riferimenti agli elementi della pagina e non compila mai i campi password. Si può limitare a certi siti.
+- **Browser**: Chrome o Edge con un profilo separato dal tuo, di norma invisibile: nessuna finestra sul tuo schermo, le pagine si vedono negli screenshot dei passaggi. In Impostazioni → Generale si può mostrare. Lavora su riferimenti agli elementi della pagina e non compila mai i campi password. Si può limitare a certi siti.
 - **Allegati in chat**: PDF, immagini, Excel, Word, PowerPoint, CSV, XML, JSON, testo. Si trascinano o si scelgono con la graffetta.
 
 ### Voce

@@ -78,6 +78,10 @@ pub struct Settings {
     pub dev_mode: String,
     /// Stile del compagno: "floating" (avatar trascinabile) o "island" (pillola in alto, attorno alla notch)
     pub companion_style: String,
+    /// Il browser degli agenti si vede (finestra) o lavora invisibile
+    pub browser_visible: bool,
+    /// Il controllo dello schermo aspetta che l'utente lasci mouse e tastiera
+    pub computer_wait_idle: bool,
     /// Aspetto
     pub accent_hue: f64,
     pub accent_chroma: f64,
@@ -145,6 +149,8 @@ impl Default for Settings {
             editor_app: String::new(),
             dev_mode: "editor".into(),
             companion_style: "island".into(),
+            browser_visible: false,
+            computer_wait_idle: true,
             accent_hue: 275.0,
             accent_chroma: 0.2,
             density: "comfortable".into(),

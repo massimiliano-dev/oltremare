@@ -194,6 +194,37 @@ pub struct Schermo {
 }
 
 /// Lo schermo è uno solo: un unico gestore per tutta l'app.
+static ULTIMA_AZIONE: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+
+#[cfg(target_os = "macos")]
+#[link(name = "CoreGraphics", kind = "framework")]
+extern "C" {
+    fn CGEventSourceSecondsSinceLastEventType(state: i32, event_type: u32) -> f64;
+}
+
+/// Secondi da quando l'utente ha usato mouse o tastiera (le azioni di Oltremare non contano).
+pub fn utente_inattivo_da() -> f64 {
+    #[cfg(target_os = "macos")]
+    {
+        // 1 = stato del sistema HID, u32::MAX = qualsiasi evento di input
+        let ultimo = unsafe { CGEventSourceSecondsSinceLastEventType(1, u32::MAX) };
+        let nostro = ULTIMA_AZIONE.lock().unwrap_or_else(|e| e.into_inner()).map(|t| t.elapsed().as_secs_f64());
+        match nostro {
+            // L'ultimo evento di input è un'azione di Oltremare: l'utente non sta usando il computer
+            Some(n) if (ultimo - n).abs() < 1.5 => n.max(ultimo) + 60.0,
+            _ => ultimo,
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        f64::MAX
+    }
+}
+
+pub fn agisce(a: &Azione) -> bool {
+    !matches!(a, Azione::Screenshot | Azione::Zoom(_) | Azione::Posizione | Azione::Attendi(_))
+}
+
 pub fn schermo() -> &'static Schermo {
     static S: std::sync::OnceLock<Schermo> = std::sync::OnceLock::new();
     S.get_or_init(Schermo::default)
@@ -307,10 +338,15 @@ impl Schermo {
     }
 
     /// Esegue un'azione. `cartella`: dove salvare gli screenshot (None = non salvarli).
+    /// Le azioni di Oltremare segnano l'ora, per distinguerle dall'uso del computer da parte dell'utente.
     pub async fn esegui(&'static self, a: Azione, cartella: Option<PathBuf>) -> Esito {
         let _turno = self.turno.lock().await;
         let a2 = a.clone();
+        let agisce = !matches!(a, Azione::Screenshot | Azione::Zoom(_) | Azione::Posizione | Azione::Attendi(_));
         let r = tokio::task::spawn_blocking(move || self.esegui_sync(&a2, cartella.as_deref())).await;
+        if agisce {
+            *ULTIMA_AZIONE.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
+        }
         // Un attimo tra un'azione e l'altra: l'interfaccia ha il tempo di reagire
         tokio::time::sleep(Duration::from_millis(120)).await;
         r.unwrap_or_else(|e| Err(e.to_string())).unwrap_or_else(Esito::errore)

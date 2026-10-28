@@ -34,7 +34,7 @@ let settings: Settings = {
   quietFrom: "22:00", quietTo: "07:30", briefingEnabled: true, briefingTime: "08:00", briefingDays: [1, 2, 3, 4, 5],
   accentHue: 275, accentChroma: 0.2, density: "comfortable", fontScale: 1, paletteHotkey: "Alt+Space", autostart: false, layout: "operator",
   mcpServers: [{ id: "m1", name: "issue", kind: "http", url: "https://issue.example.com/api/mcp", headersHelper: 'cat "$HOME/.issue/headers.json"', command: "", args: [], enabled: true }],
-  editorApp: "", devMode: "editor", companionStyle: "island",
+  editorApp: "", devMode: "editor", companionStyle: "island", browserVisible: false, computerWaitIdle: true,
 };
 const keys = { anthropic: scenario !== "empty", openai: scenario !== "empty" };
 

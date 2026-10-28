@@ -159,7 +159,7 @@ fn sistema(agent: &Agent, s: &Settings, istruzioni_server: &[(String, String)]) 
         p.push_str("- Prima di modificare o spostare file, guarda cosa c'è. Non cancellare mai: al massimo sposta nel Cestino.\n");
         p.push_str("- Alla fine riassumi in poche righe cosa hai fatto.\n");
         if strumenti.iter().any(|t| t.categoria == "computer") {
-            p.push_str("- Puoi vedere e usare lo schermo: guarda con uno screenshot prima di agire e controlla di nuovo dopo le azioni importanti. Preferisci le scorciatoie da tastiera quando sono affidabili. Se l'utente muove il mouse, fermati e chiedi.\n");
+            p.push_str("- Puoi vedere e usare lo schermo, ma mouse e tastiera sono dell'utente: usali solo come ultima risorsa. Prima prova file, comandi, gli account, il browser degli agenti (lavora senza finestre) e l'automazione delle app (automazione_app, AppleScript). Se devi usare lo schermo, guarda con uno screenshot prima di agire e controlla dopo le azioni importanti; preferisci le scorciatoie da tastiera affidabili. Se l'utente muove il mouse, fermati e chiedi.\n");
         }
     }
     // Istruzioni dei server MCP collegati (configurati dall'utente)

@@ -38,7 +38,15 @@ const SNAPSHOT: &str = r#"(() => {
 })()"#;
 
 pub struct Sessione {
-    inner: tokio::sync::Mutex<Option<(Browser, Page)>>,
+    /// Browser, pagina e se è visibile (con finestra) o invisibile
+    inner: tokio::sync::Mutex<Option<(Browser, Page, bool)>>,
+}
+
+/// Il browser degli agenti si vede sullo schermo? (Predefinito: no, lavora senza finestre)
+static VISIBILE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn imposta_visibile(v: bool) {
+    VISIBILE.store(v, std::sync::atomic::Ordering::Relaxed);
 }
 
 pub fn sessione() -> &'static Sessione {
@@ -86,20 +94,22 @@ pub fn consentito(url: &str, domini: &[String]) -> bool {
 
 impl Sessione {
     async fn pagina(&self, profilo: &Path) -> Result<Page, String> {
+        let visibile = VISIBILE.load(std::sync::atomic::Ordering::Relaxed);
         let mut g = self.inner.lock().await;
-        if let Some((_, p)) = g.as_ref() {
-            // Il browser può essere stato chiuso dall'utente
-            if p.url().await.is_ok() {
+        if let Some((_, p, v)) = g.as_ref() {
+            // Il browser può essere stato chiuso dall'utente; se è cambiata la visibilità si riapre
+            if *v == visibile && p.url().await.is_ok() {
                 return Ok(p.clone());
             }
-            *g = None;
+            if let Some((mut b, _, _)) = g.take() {
+                let _ = b.close().await;
+            }
         }
         let exe = trova_browser().ok_or("Non trovo Chrome né Edge: installane uno per usare il browser")?;
         std::fs::create_dir_all(profilo).map_err(|e| e.to_string())?;
-        let cfg = BrowserConfig::builder()
-            .chrome_executable(exe)
-            .user_data_dir(profilo)
-            .with_head()
+        let base = BrowserConfig::builder().chrome_executable(exe).user_data_dir(profilo);
+        let base = if visibile { base.with_head() } else { base.new_headless_mode() };
+        let cfg = base
             .window_size(1280, 900)
             .viewport(None)
             .args(["--no-first-run", "--no-default-browser-check", "--lang=it-IT"])
@@ -111,12 +121,12 @@ impl Sessione {
             Some(p) => p,
             None => browser.new_page("about:blank").await.map_err(|e| e.to_string())?,
         };
-        *g = Some((browser, page.clone()));
+        *g = Some((browser, page.clone(), visibile));
         Ok(page)
     }
 
     pub async fn chiudi(&self) {
-        if let Some((mut b, _)) = self.inner.lock().await.take() {
+        if let Some((mut b, _, _)) = self.inner.lock().await.take() {
             let _ = b.close().await;
         }
     }

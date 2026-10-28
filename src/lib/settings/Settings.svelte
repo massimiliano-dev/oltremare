@@ -114,11 +114,19 @@
       <section>
         <h3>Permessi di sistema</h3>
         <Permissions />
+        <label class="check">
+          <input type="checkbox" checked={s.computerWaitIdle} onchange={(e) => settings.save({ computerWaitIdle: (e.target as HTMLInputElement).checked })} />
+          <span><strong>Usa mouse e tastiera solo quando non li stai usando</strong><small>Se un agente deve controllare lo schermo, aspetta che tu li lasci da qualche secondo e si ferma appena li tocchi. Gli agenti preferiscono comunque comandare le app senza schermo.</small></span>
+        </label>
       </section>
       <section>
         <h3>Browser degli agenti</h3>
         {#await api.browserStatus() then b}
           <p class="soon"><Icon name="globe" size={15} /> {b.installed ? `Usa ${b.installed.split(/[\/]/).pop()?.replace(".exe", "")} con un profilo separato dal tuo: cookie e accessi degli agenti restano lì.` : "Installa Chrome o Edge per far navigare gli agenti."}</p>
+          <label class="check">
+            <input type="checkbox" checked={s.browserVisible} onchange={(e) => settings.save({ browserVisible: (e.target as HTMLInputElement).checked })} />
+            <span><strong>Mostra il browser degli agenti</strong><small>Spento, gli agenti navigano senza aprire finestre sul tuo schermo: vedi le pagine negli screenshot dei passaggi. Accendilo per guardarli lavorare o per fare tu un accesso nel loro profilo.</small></span>
+          </label>
         {/await}
         <div class="row-btns">
           <button class="btn btn-line" onclick={() => api.browserClose()}>Chiudi il browser</button>
