@@ -35,6 +35,26 @@ fn breve(input: &Value) -> String {
     .unwrap_or_default()
 }
 
+/// Le sessioni di revisione (CTO, altre AI) iniziano con questa marca: non sono conversazioni da riprendere.
+pub const MARCA_REVISIONE: &str = "[Revisione]";
+
+/// Il primo messaggio dell'utente in una sessione di Claude Code (è il titolo della conversazione).
+pub fn primo_messaggio(file: &Path) -> String {
+    std::fs::read_to_string(file)
+        .ok()
+        .and_then(|t| t.lines().find_map(|l| serde_json::from_str::<Value>(l).ok().filter(|v| v["type"] == "user" && v["isMeta"].as_bool() != Some(true)).map(|v| testo_contenuto(&v["message"]["content"])).filter(|t| !t.trim().is_empty() && !t.starts_with('<'))))
+        .unwrap_or_default()
+}
+
+pub fn e_revisione(file: &Path) -> bool {
+    primo_messaggio(file).starts_with(MARCA_REVISIONE)
+}
+
+/// L'ultima conversazione di lavoro del progetto (le revisioni non contano).
+pub fn ultima_conversazione(cartella: &Path) -> Option<String> {
+    sessioni(cartella).into_iter().map(|(f, _)| f).find(|f| !e_revisione(f)).and_then(|f| f.file_stem().map(|s| s.to_string_lossy().into_owned()))
+}
+
 async fn git_modifiche(cartella: &Path) -> String {
     let o = tokio::process::Command::new("git").args(["status", "--short"]).current_dir(cartella).env("PATH", crate::shell_env::path_utente()).output().await;
     match o {
@@ -871,20 +891,19 @@ pub fn vista_sessione(cartella: &Path, scelta: Option<&str>) -> Value {
     let scelta = scelta.as_deref();
     let file = match scelta.filter(|x| !x.is_empty()) {
         Some(id) => elenco.iter().map(|(p, _)| p.clone()).find(|p| p.file_stem().is_some_and(|s| s.to_string_lossy() == id)),
-        None => elenco.first().map(|(p, _)| p.clone()),
+        // Senza una sessione scelta: l'ultima conversazione vera, non una revisione del CTO
+        None => elenco.iter().map(|(p, _)| p.clone()).find(|p| !e_revisione(p)),
     };
     let sessioni_vista: Vec<Value> = elenco
         .iter()
-        .take(15)
+        .take(25)
         .map(|(p, m)| {
-            let titolo = std::fs::read_to_string(p)
-                .ok()
-                .and_then(|t| t.lines().find_map(|l| serde_json::from_str::<Value>(l).ok().filter(|v| v["type"] == "user" && v["isMeta"].as_bool() != Some(true)).map(|v| testo_contenuto(&v["message"]["content"])).filter(|t| !t.trim().is_empty() && !t.starts_with('<'))))
-                .unwrap_or_default();
+            let titolo = primo_messaggio(p);
             json!({
                 "id": p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(),
                 "title": titolo.chars().take(80).collect::<String>(),
                 "updatedAt": m.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0),
+                "review": titolo.starts_with(MARCA_REVISIONE),
             })
         })
         .collect();

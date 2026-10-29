@@ -588,7 +588,7 @@ pub async fn studio_review(handle: AppHandle, project: String, text: String, mod
         istruzioni: format!("{CTO}{}", memoria.unwrap_or_default()),
         cartelle: vec![],
     };
-    let richiesta = format!("Rivedi le modifiche fatte per questa richiesta dell'utente:\n<richiesta>\n{}\n</richiesta>", text.trim());
+    let richiesta = format!("{} Rivedi le modifiche fatte per questa richiesta dell'utente:\n<richiesta>\n{}\n</richiesta>", sviluppo::MARCA_REVISIONE, text.trim());
     let sid = sviluppo::avvia_headless_con(&handle, &p, &richiesta, None, o).await.map_err(AppError::msg)?;
     Ok(json!({ "session": sid }))
 }
@@ -679,7 +679,7 @@ pub async fn studio_run(handle: AppHandle, project: String, text: String, model:
         Some(pr) => ambiente_claudex(pr).await.map_err(AppError::msg)?,
         None => vec![],
     };
-    let sessione = if new_session.unwrap_or(false) { None } else { session.filter(|x| !x.is_empty()).or_else(|| sviluppo::sessioni(&p).first().and_then(|(f, _)| f.file_stem().map(|s| s.to_string_lossy().into_owned()))) };
+    let sessione = if new_session.unwrap_or(false) { None } else { session.filter(|x| !x.is_empty()).or_else(|| sviluppo::ultima_conversazione(&p)) };
     let collegamento = st.store.settings().studio_links.get(&project).cloned().map(|l| {
         format!(
             "\nQuesto progetto è collegato al gestionale «{}», progetto {} ({}). Usa i suoi strumenti (mcp__{}__*) per leggere le issue e la documentazione quando servono; se lavori su una issue, seguine le istruzioni (inizio lavoro, chiave nei commit, aggiornamento dello stato).",

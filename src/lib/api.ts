@@ -270,7 +270,7 @@ export interface DevItem {
 export interface DevSession {
   id: string | null;
   items: DevItem[];
-  sessions: { id: string; title: string; updatedAt: number }[];
+  sessions: { id: string; title: string; updatedAt: number; review?: boolean }[];
   running: boolean;
   here?: boolean;
   stuck?: boolean;

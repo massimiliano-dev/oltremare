@@ -20,6 +20,29 @@
   let text = $state("");
   let notes = $state("");
   let opinionProfile = $state("");
+  let history = $state(false);
+
+  function quando(ms: number) {
+    const d = new Date(ms);
+    const oggi = new Date();
+    const stesso = d.toDateString() === oggi.toDateString();
+    return stesso ? d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString("it-IT", { day: "numeric", month: "short" });
+  }
+
+  function outside(node: HTMLElement) {
+    const h = (e: PointerEvent) => {
+      if (!node.parentElement?.contains(e.target as Node)) history = false;
+    };
+    const k = (e: KeyboardEvent) => e.key === "Escape" && (history = false);
+    setTimeout(() => window.addEventListener("pointerdown", h));
+    window.addEventListener("keydown", k);
+    return {
+      destroy() {
+        window.removeEventListener("pointerdown", h);
+        window.removeEventListener("keydown", k);
+      },
+    };
+  }
   let openItems = $state<Record<number, boolean>>({});
   let scroller: HTMLElement | undefined = $state();
 
@@ -138,6 +161,22 @@
     <span class="sp"></span>
     {#if running && ws.dev.session?.here}
       <button class="icon-btn" title="Ferma Claude" aria-label="Ferma" onclick={() => ws.dev.stopClaude()}><Icon name="stop" size={14} /></button>
+    {/if}
+    {#if (ws.dev.session?.sessions ?? []).some((x) => !x.review)}
+      <div class="hist">
+        <button class="icon-btn" class:on={history} onclick={() => (history = !history)} title="Conversazioni passate di questo progetto" aria-label="Conversazioni passate" aria-expanded={history}><Icon name="clock" size={15} /></button>
+        {#if history}
+          <div class="hmenu" role="menu" use:outside>
+            <div class="hh">Conversazioni di {ws.project.name}</div>
+            {#each (ws.dev.session?.sessions ?? []).filter((x) => !x.review) as sx (sx.id)}
+              <button role="menuitem" class:cur={sx.id === ws.dev.session?.id} onclick={() => { ws.switchSession(sx.id); history = false; }}>
+                <span class="ht">{sx.title || "Senza titolo"}</span>
+                <small>{quando(sx.updatedAt)}</small>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
     {/if}
     {#if ws.memoryNote}
       <button class="icon-btn" title="Memoria del progetto: com'è fatto, decisioni, diario dei lavori (si apre in Obsidian)" aria-label="Memoria del progetto" onclick={() => api.memoryOpen(ws.memoryNote ?? undefined)}><Icon name="book" size={15} /></button>
@@ -692,6 +731,58 @@
     padding: 0 10px;
     font-size: var(--t-xs);
     gap: 5px;
+  }
+  .hist {
+    position: relative;
+  }
+  .hmenu {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 320px;
+    max-height: 60vh;
+    overflow: auto;
+    padding: 6px;
+    border-radius: 12px;
+    background: var(--paper);
+    box-shadow:
+      0 0 0 1px var(--rule),
+      0 12px 32px -8px oklch(0.25 0.06 var(--tint-h) / 0.28);
+  }
+  .hh {
+    padding: 4px 8px 6px;
+    font-size: var(--t-xs);
+    font-weight: 700;
+    color: var(--ink-2);
+  }
+  .hmenu button[role="menuitem"] {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border-radius: 7px;
+    font-size: var(--t-sm);
+    text-align: left;
+  }
+  .hmenu button[role="menuitem"]:hover {
+    background: color-mix(in oklch, var(--accent) 9%, transparent);
+  }
+  .hmenu button.cur {
+    box-shadow: inset 2px 0 0 var(--accent);
+    background: color-mix(in oklch, var(--accent) 6%, transparent);
+  }
+  .ht {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .hmenu small {
+    flex: none;
+    color: var(--ink-3);
   }
   .task.ph-review-ready {
     box-shadow: inset 0 0 0 1.5px var(--warn);

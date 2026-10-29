@@ -121,7 +121,7 @@ export class Workspace {
 
   async start() {
     await this.dev.open(this.project.path);
-    this.restore();
+    await this.restore();
     this.dev.start();
     this.dev.watch();
     this.git.start(this.project.path);
@@ -199,6 +199,7 @@ export class Workspace {
       t.session = r.session;
       this.dev.sessionId = r.session || null;
       this.dev.refreshSession();
+      this.persist();
     } catch (e) {
       t.phase = "error";
       t.error = errorText(e);
@@ -206,22 +207,33 @@ export class Workspace {
     }
   }
 
-  /** Compiti dell'orchestratore salvati per progetto (gli ultimi 30). */
+  /** Compiti e conversazione salvati per progetto: nelle preferenze dell'app (durano ai riavvii) e nel webview. */
   persist() {
+    const stato = { tasks: this.tasks.slice(-30), fresh: this.fresh, session: this.dev.sessionId };
     try {
-      localStorage.setItem(`oltremare:studio-tasks:${this.path}`, JSON.stringify({ tasks: this.tasks.slice(-30), fresh: this.fresh }));
+      localStorage.setItem(`oltremare:studio-tasks:${this.path}`, JSON.stringify(stato));
     } catch {}
+    api.prefsSet(`studio:stato:${this.path}`, stato).catch(() => {});
   }
 
-  private restore() {
-    const saved = load<{ tasks: Task[]; fresh?: boolean } | null>(`oltremare:studio-tasks:${this.path}`, null);
+  private async restore() {
+    type Salvato = { tasks: Task[]; fresh?: boolean; session?: string | null };
+    const saved = (await api.prefsGet<Salvato>(`studio:stato:${this.path}`).catch(() => null)) ?? load<Salvato | null>(`oltremare:studio-tasks:${this.path}`, null);
     // Ciò che era a metà quando lo Studio si è chiuso non può riprendere: si mostra come concluso
     this.tasks = (saved?.tasks ?? []).map((t) => (["deciding", "planning", "working", "reviewing"].includes(t.phase) ? { ...t, phase: "done" as const } : t));
     this.fresh = !!saved?.fresh;
     this.taskId = Math.max(0, ...this.tasks.map((t) => t.id));
-    const sid = [...this.tasks].reverse().find((t) => t.session)?.session;
+    const sid = saved?.session ?? [...this.tasks].reverse().find((t) => t.session)?.session;
     if (sid && !this.fresh) this.dev.sessionId = sid;
     this.refreshMemory();
+  }
+
+  /** Riprende una conversazione passata del progetto: la vista e la prossima richiesta continuano da lì. */
+  switchSession(id: string) {
+    this.dev.sessionId = id;
+    this.fresh = false;
+    this.dev.refreshSession();
+    this.persist();
   }
 
   async refreshMemory() {
