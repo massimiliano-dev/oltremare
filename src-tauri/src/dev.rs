@@ -173,6 +173,7 @@ pub async fn dev_send(handle: AppHandle, folder: String, message: String, sessio
 
 #[tauri::command]
 pub async fn dev_stop(app: State<'_, App>, folder: String) -> Result<bool> {
-    let p = dentro(&app, &folder)?;
+    // Il progetto può essere dello Studio (Scrivania/Sviluppo, Personale) o tra le cartelle dello Sviluppatore
+    let p = crate::studio::cartella_pub(&app, &folder).or_else(|_| dentro(&app, &folder))?;
     Ok(sviluppo::ferma_headless(&p).await)
 }

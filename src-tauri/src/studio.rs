@@ -369,12 +369,40 @@ pub async fn studio_claudex() -> Value {
     tokio::task::spawn_blocking(|| json!({ "installed": claudex_bin().is_some(), "profiles": claudex_profili() })).await.unwrap_or(Value::Null)
 }
 
+/// Accende il proxy di Claudex se non risponde già. Con `proxy start -d` il demone si spegneva insieme al
+/// processo che lo avviava: lo si lancia in primo piano, in un gruppo di processi suo, e lo si lascia acceso.
+async fn proxy_claudex(bin: &std::path::Path) -> std::result::Result<(), String> {
+    let acceso = || async { tokio::net::TcpStream::connect("127.0.0.1:13456").await.is_ok() };
+    if acceso().await {
+        return Ok(());
+    }
+    let mut cmd = std::process::Command::new(bin);
+    cmd.args(["proxy", "start"]).env("PATH", crate::shell_env::path_utente()).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000 | 0x0000_0200); // CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
+    }
+    cmd.spawn().map_err(|e| format!("Non riesco ad avviare il proxy di Claudex: {e}"))?;
+    for _ in 0..40 {
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        if acceso().await {
+            return Ok(());
+        }
+    }
+    Err("Il proxy di Claudex non risponde sulla porta 13456 (prova «claudex proxy start» dal Terminale per vedere l'errore)".into())
+}
+
 /// Ambiente per far lavorare Claude Code con un profilo di Claudex (proxy locale con traduzione del protocollo).
 async fn ambiente_claudex(profilo: &str) -> std::result::Result<Vec<(String, String)>, String> {
     let bin = claudex_bin().ok_or("Claudex non è installato")?;
     let p = claudex_profili().into_iter().find(|x| x["name"] == profilo).ok_or_else(|| format!("Profilo Claudex «{profilo}» non trovato"))?;
-    // Il proxy parte in background se non è già acceso
-    let _ = tokio::process::Command::new(&bin).args(["proxy", "start", "-d"]).env("PATH", crate::shell_env::path_utente()).output().await;
+    proxy_claudex(&bin).await?;
     let base = format!("http://127.0.0.1:13456/proxy/{profilo}");
     let modello = p["model"].as_str().unwrap_or_default().to_string();
     let slot = |k: &str| p["models"][k].as_str().map(str::to_string).unwrap_or_else(|| modello.clone());
@@ -432,7 +460,7 @@ pub async fn studio_run(handle: AppHandle, project: String, text: String, model:
         ambiente,
         istruzioni: format!(
             "{}{}",
-            if plan { "Ora sei in modalità piano: esplora e proponi un piano concreto (file da toccare, passi, come verificare), senza modificare nulla. L'utente lo approverà prima dell'esecuzione." } else { "" },
+            if plan { "Ora sei in modalità piano: esplora e proponi un piano concreto (file da toccare, passi, come verificare), senza modificare nulla. L'utente lo approverà prima dell'esecuzione. Scrivi il piano completo nel tuo ultimo messaggio: Oltremare lo mostra con il pulsante «Approva ed esegui» (non cercare né usare ExitPlanMode e non chiedere approvazione a parole)." } else { "" },
             collegamento.unwrap_or_default()
         ),
     };

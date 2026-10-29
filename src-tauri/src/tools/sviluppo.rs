@@ -95,18 +95,20 @@ pub(crate) fn comando_headless_con(bin: &Path, cartella: &Path, messaggio: &str,
     server.sort();
     server.dedup();
     consentiti.extend(server.iter().map(|n| format!("mcp__{n}")));
+    // Claude in Chrome: il browser vero dell'utente, visibile, per provare l'app e navigare
+    consentiti.push("mcp__claude-in-chrome".into());
     let mut cmd = crate::providers::claude_code::comando(bin);
     cmd.current_dir(cartella)
         .arg("-p")
         .arg(messaggio)
-        .args(["--output-format", "stream-json", "--verbose", "--permission-mode", if o.modo.is_empty() { "acceptEdits" } else { &o.modo }])
+        .args(["--output-format", "stream-json", "--verbose", "--chrome", "--permission-mode", if o.modo.is_empty() { "acceptEdits" } else { &o.modo }])
         .arg("--allowedTools")
         .arg(consentiti.join(","))
         .arg("--disallowedTools")
         .arg(VIETATI.join(","))
         .arg("--append-system-prompt")
         .arg(format!(
-            "Lavori su richiesta dell'utente tramite il suo assistente Oltremare, senza poter fare domande: decidi in modo ragionevole e dichiara le scelte. Non fare push. Alla fine scrivi un riepilogo breve: cosa hai cambiato, come verificarlo, cosa resta da fare.{}",
+            "Lavori su richiesta dell'utente tramite il suo assistente Oltremare, senza poter fare domande: decidi in modo ragionevole e dichiara le scelte. Non fare push. Alla fine scrivi un riepilogo breve: cosa hai cambiato, come verificarlo, cosa resta da fare.\nPer vedere e provare l'app (o navigare un sito) usa Claude in Chrome (strumenti mcp__claude-in-chrome__*): è il Chrome dell'utente, che ti guarda lavorare. Crea una scheda nuova e lavora lì, senza toccare le schede già aperte; alla fine lasciala sull'ultima pagina utile.{}",
             if o.istruzioni.is_empty() { String::new() } else { format!("\n{}", o.istruzioni) }
         ));
     let modello = if !o.modello.is_empty() { o.modello.clone() } else { s.claude_code_model.clone() };
@@ -654,22 +656,49 @@ struct Headless {
 
 static HEADLESS: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<PathBuf, Headless>>> = std::sync::LazyLock::new(Default::default);
 
+/// Claude in Chrome si collega solo se Chrome è aperto: se è chiuso lo si apre in background (senza rubare il fuoco).
+async fn apri_chrome() {
+    #[cfg(target_os = "macos")]
+    {
+        let aperto = tokio::process::Command::new("pgrep").args(["-x", "Google Chrome"]).output().await.is_ok_and(|o| o.status.success());
+        if !aperto && Path::new("/Applications/Google Chrome.app").exists() {
+            let _ = tokio::process::Command::new("open").args(["-ga", "Google Chrome"]).status().await;
+        }
+    }
+}
+
+/// Lavoro avviato da Oltremare sul progetto: (in corso, sessione).
+fn headless_sessione(cartella: &Path) -> Option<(bool, String)> {
+    let m = HEADLESS.lock().unwrap_or_else(|e| e.into_inner());
+    m.get(cartella).map(|h| (h.finito.lock().map(|f| f.is_none()).unwrap_or(false), h.sessione.lock().map(|x| x.clone()).unwrap_or_default()))
+}
+
 /// Claude Code in background sta lavorando su questo progetto? (Some(true) in corso, Some(false) appena finito)
 pub(crate) fn headless_attivo(cartella: &Path) -> Option<bool> {
     let m = HEADLESS.lock().unwrap_or_else(|e| e.into_inner());
     m.get(cartella).map(|h| h.finito.lock().map(|f| f.is_none()).unwrap_or(false))
 }
 
+/// Ferma Claude Code in background sul progetto. Il lavoro resta registrato come finito (fermato), così
+/// la vista smette subito di mostrarlo «in corso» invece di aspettare che la sessione resti ferma per due minuti.
 pub async fn ferma_headless(cartella: &Path) -> bool {
-    let h = HEADLESS.lock().unwrap_or_else(|e| e.into_inner()).remove(cartella);
-    match h {
-        Some(h) => {
-            let mut f = h.figlio.lock().await;
-            super::shell::uccidi(&mut f, h.pid).await;
-            true
+    let reale = cartella.canonicalize().unwrap_or_else(|_| cartella.to_path_buf());
+    let trovato = {
+        let m = HEADLESS.lock().unwrap_or_else(|e| e.into_inner());
+        m.iter()
+            .find(|(k, _)| k.as_path() == cartella || k.canonicalize().is_ok_and(|k| k == reale))
+            .map(|(_, h)| (h.figlio.clone(), h.pid, h.finito.clone()))
+    };
+    let Some((figlio, pid, finito)) = trovato else { return false };
+    {
+        let mut f = finito.lock().unwrap_or_else(|e| e.into_inner());
+        if f.is_none() {
+            *f = Some((true, "Fermato dall'utente".into()));
         }
-        None => false,
     }
+    let mut f = figlio.lock().await;
+    super::shell::uccidi(&mut f, pid).await;
+    true
 }
 
 pub fn ferma_tutti_headless() {
@@ -699,6 +728,7 @@ pub async fn avvia_headless_con(app: &AppHandle, cartella: &Path, messaggio: &st
     let mut cmd = comando_headless_con(&bin, cartella, messaggio, sessione.as_deref(), &s, &o);
     #[cfg(unix)]
     cmd.process_group(0);
+    apri_chrome().await;
     let mut figlio = cmd.spawn().map_err(|e| format!("Non riesco ad avviare Claude Code: {e}"))?;
     let pid = figlio.id();
     let stdout = figlio.stdout.take().ok_or("uscita non disponibile")?;
@@ -879,7 +909,14 @@ pub fn vista_sessione(cartella: &Path, scelta: Option<&str>) -> Value {
     }
     let salta = items.len().saturating_sub(400);
     let st = leggi_sessione(&file);
-    let running = headless_attivo(cartella) == Some(true) || (!st.finito && st.inattivo_da < 120);
+    // Se questa sessione l'ha avviata Oltremare si sa con certezza se è in corso (anche dopo «Ferma»);
+    // altrimenti (es. nell'editor) si guarda l'attività della sessione
+    let id_file = file.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let running = match headless_sessione(cartella) {
+        Some((attivo, sid)) if sid == id_file => attivo,
+        Some((true, _)) => true,
+        _ => !st.finito && st.inattivo_da < 120,
+    };
     json!({
         "id": file.file_stem().map(|s| s.to_string_lossy().into_owned()),
         "items": items.into_iter().skip(salta).collect::<Vec<_>>(),

@@ -56,6 +56,11 @@ class StudioState {
 
   current = $derived(this.files.find((f) => f.path === this.active) ?? null);
   lastTask = $derived(this.tasks.at(-1) ?? null);
+  /** Messaggi scritti mentre Claude lavora: partono in ordine, nella stessa sessione, appena finisce */
+  queue = $state<{ id: number; text: string }[]>([]);
+  private queueId = 0;
+  /** Claude lavora, o c'è un piano da approvare: i nuovi messaggi aspettano */
+  busy = $derived(!!dev.session?.running || ["deciding", "planning", "working", "plan-ready"].includes(this.tasks.at(-1)?.phase ?? ""));
 
   async loadProjects() {
     this.loading = true;
@@ -92,6 +97,7 @@ class StudioState {
   }
 
   close() {
+    this.queue = [];
     dev.stop();
     git.stop();
     this.project = null;
@@ -178,6 +184,36 @@ class StudioState {
     }
   }
 
+  enqueue(text: string) {
+    if (text.trim()) this.queue = [...this.queue, { id: ++this.queueId, text: text.trim() }];
+  }
+
+  unqueue(id: number) {
+    this.queue = this.queue.filter((q) => q.id !== id);
+  }
+
+  /** Manda il primo messaggio in coda, se Claude è libero. */
+  drain() {
+    if (this.busy || !this.queue.length) return;
+    const [q, ...rest] = this.queue;
+    this.queue = rest;
+    this.send(q.text);
+  }
+
+  /** Interrompe il lavoro in corso (o lascia il piano) e manda subito questo messaggio. */
+  async sendNow(id: number) {
+    const q = this.queue.find((x) => x.id === id);
+    if (!q) return;
+    this.queue = [q, ...this.queue.filter((x) => x.id !== id)];
+    const t = this.lastTask;
+    if (dev.session?.running) {
+      await dev.stopClaude();
+      return; // onFinished chiude il compito e svuota la coda
+    }
+    if (t && t.phase !== "done" && t.phase !== "error") t.phase = "done";
+    this.drain();
+  }
+
   /** Quando Claude finisce: piano pronto da approvare, oppure lavoro concluso. */
   async onFinished() {
     const t = this.lastTask;
@@ -190,6 +226,7 @@ class StudioState {
       t.phase = "done";
       this.reloadClean();
     }
+    this.drain();
   }
 
   async approve(t: Task, notes?: string) {

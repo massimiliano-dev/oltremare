@@ -14,10 +14,69 @@
   let { prompt = "" }: { prompt?: string } = $props();
   let frame: HTMLIFrameElement | undefined = $state();
   let bottomOpen = $state(true);
+
+  // Colonne laterali allargabili a mano (trascinando il bordo, o con le frecce): la larghezza si ricorda
+  const DEF = { left: 260, right: 440 };
+  const LIM = { left: [180, 560], right: [320, 820] } as const;
+  const leggi = (k: "left" | "right") => {
+    try {
+      const v = Number(localStorage.getItem(`oltremare:studio-${k}`));
+      return v ? Math.min(Math.max(v, LIM[k][0]), LIM[k][1]) : DEF[k];
+    } catch {
+      return DEF[k];
+    }
+  };
+  let left = $state(leggi("left"));
+  let right = $state(leggi("right"));
+  let ws: HTMLElement | undefined = $state();
+  let dragging = $state<"left" | "right" | null>(null);
+
+  function imposta(k: "left" | "right", v: number) {
+    // Il centro tiene almeno 360 px
+    const spazio = (ws?.clientWidth ?? 1400) - (k === "left" ? right : left) - 360;
+    const n = Math.round(Math.min(Math.max(v, LIM[k][0]), LIM[k][1], Math.max(spazio, LIM[k][0])));
+    if (k === "left") left = n;
+    else right = n;
+    try {
+      localStorage.setItem(`oltremare:studio-${k}`, String(n));
+    } catch {}
+  }
+
+  function trascina(k: "left" | "right", e: PointerEvent) {
+    if (e.button !== 0 || !ws) return;
+    e.preventDefault();
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    dragging = k;
+    const box = ws.getBoundingClientRect();
+    const muovi = (ev: PointerEvent) => imposta(k, k === "left" ? ev.clientX - box.left : box.right - ev.clientX);
+    const fine = () => {
+      dragging = null;
+      el.removeEventListener("pointermove", muovi);
+      el.removeEventListener("pointerup", fine);
+      el.removeEventListener("pointercancel", fine);
+    };
+    el.addEventListener("pointermove", muovi);
+    el.addEventListener("pointerup", fine);
+    el.addEventListener("pointercancel", fine);
+  }
+
+  function tasti(k: "left" | "right", e: KeyboardEvent) {
+    const passo = e.shiftKey ? 60 : 20;
+    const verso = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (!verso) return;
+    e.preventDefault();
+    imposta(k, (k === "left" ? left : right) + (k === "left" ? verso : -verso) * passo);
+  }
   const proc = $derived(dev.processes.find((p) => p.id === dev.bottom) ?? dev.processes[0] ?? null);
 </script>
 
-<div class="ws">
+<div class="ws" bind:this={ws} class:dragging style="--left:{left}px; --right:{right}px">
+  <!-- Separatore che si sposta (ruolo ARIA «separator» con valore): è un controllo, si può mettere a fuoco -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+  <div class="gutter gl" class:on={dragging === "left"} role="separator" aria-orientation="vertical" aria-label="Larghezza dell'esplora file" aria-valuenow={left} aria-valuemin={LIM.left[0]} aria-valuemax={LIM.left[1]} tabindex="0" title="Trascina per allargare · doppio clic per tornare com'era" onpointerdown={(e) => trascina("left", e)} ondblclick={() => imposta("left", DEF.left)} onkeydown={(e) => tasti("left", e)}></div>
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+  <div class="gutter gr" class:on={dragging === "right"} role="separator" aria-orientation="vertical" aria-label="Larghezza della chat" aria-valuenow={right} aria-valuemin={LIM.right[0]} aria-valuemax={LIM.right[1]} tabindex="0" title="Trascina per allargare · doppio clic per tornare com'era" onpointerdown={(e) => trascina("right", e)} ondblclick={() => imposta("right", DEF.right)} onkeydown={(e) => tasti("right", e)}></div>
   <aside class="explorer">
     <IssuesPanel />
     <SourceControl />
@@ -86,10 +145,55 @@
 
 <style>
   .ws {
+    position: relative;
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: 260px minmax(0, 1fr) 440px;
+    grid-template-columns: var(--left) minmax(0, 1fr) var(--right);
+  }
+  .ws.dragging {
+    cursor: col-resize;
+    user-select: none;
+  }
+  /* Durante il trascinamento l'anteprima non deve rubare il mouse */
+  .ws.dragging :global(iframe) {
+    pointer-events: none;
+  }
+  .gutter {
+    position: absolute;
+    z-index: 5;
+    top: 0;
+    bottom: 0;
+    width: 9px;
+    cursor: col-resize;
+    touch-action: none;
+  }
+  .gl {
+    left: calc(var(--left) - 5px);
+  }
+  .gr {
+    right: calc(var(--right) - 4px);
+  }
+  .gutter::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 4px;
+    width: 1px;
+    background: transparent;
+    transition: background-color 0.15s, box-shadow 0.15s;
+  }
+  .gutter:hover::after,
+  .gutter:focus-visible::after,
+  .gutter.on::after {
+    width: 2px;
+    left: 3.5px;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 16%, transparent);
+  }
+  .gutter:focus-visible {
+    outline: none;
   }
   .explorer {
     overflow: auto;
@@ -264,10 +368,5 @@
     line-height: 1.5;
     white-space: pre-wrap;
     background: var(--paper);
-  }
-  @media (max-width: 1300px) {
-    .ws {
-      grid-template-columns: 220px minmax(0, 1fr) 380px;
-    }
   }
 </style>

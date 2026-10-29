@@ -77,8 +77,14 @@
 
   async function send(nuova = false) {
     const t = text.trim();
-    if (!t || running) return;
+    if (!t) return;
     text = "";
+    // Claude sta lavorando (o c'è già una coda): il messaggio aspetta il suo turno
+    if (studio.busy || studio.queue.length) {
+      studio.enqueue(t);
+      studio.drain();
+      return;
+    }
     await studio.send(t, nuova);
   }
 
@@ -220,7 +226,21 @@
   </div>
 
   <div class="composer">
-    <textarea class="input" rows="3" bind:value={text} onkeydown={key} placeholder={running ? "Claude sta lavorando…" : `Cosa facciamo su ${studio.project?.name ?? "questo progetto"}?`}></textarea>
+    {#if studio.queue.length}
+      <ol class="queue" aria-label="Messaggi in coda">
+        {#each studio.queue as q, i (q.id)}
+          <li>
+            <span class="qn">{i + 1}</span>
+            <span class="qt" title={q.text}>{q.text}</span>
+            <button class="qa" onclick={() => { studio.unqueue(q.id); text = q.text; }} title="Riporta nel campo per modificarlo" aria-label="Modifica"><Icon name="pen" size={12} /></button>
+            <button class="qa" onclick={() => studio.sendNow(q.id)} title={running ? "Interrompi il lavoro in corso e invialo subito" : "Invialo subito"} aria-label="Invia subito"><Icon name="bolt" size={12} /></button>
+            <button class="qa" onclick={() => studio.unqueue(q.id)} title="Togli dalla coda" aria-label="Togli"><Icon name="x" size={12} /></button>
+          </li>
+        {/each}
+        <li class="qinfo">{studio.lastTask?.phase === "plan-ready" ? "In attesa: partono dopo che hai approvato il piano e Claude ha finito" : "Partono in ordine appena Claude finisce"}</li>
+      </ol>
+    {/if}
+    <textarea class="input" rows="3" bind:value={text} onkeydown={key} placeholder={studio.busy ? "Claude sta lavorando: scrivi pure, il messaggio va in coda" : `Cosa facciamo su ${studio.project?.name ?? "questo progetto"}?`}></textarea>
     <div class="ctl">
       <label title="Modello: Auto lascia scegliere all'orchestratore" style="--h:{MODEL_HUE[studio.modelChoice]}">
         <Icon name="cpu" size={13} />
@@ -248,7 +268,7 @@
         </select>
       </label>
       <span class="sp"></span>
-      <button class="btn btn-primary sm" onclick={() => send()} disabled={!text.trim() || running}>Invia</button>
+      <button class="btn btn-primary sm" onclick={() => send()} disabled={!text.trim()}>{studio.busy ? "Accoda" : "Invia"}</button>
     </div>
     {#if studio.claudex && !studio.claudex.installed}
       <small class="hint">Altre AI (Codex, Gemini, Grok, DeepSeek, locali): installa <a href="https://github.com/StringKe/claudex" target="_blank" rel="noreferrer">Claudex</a> e configura i profili; compaiono qui.</small>
@@ -559,6 +579,61 @@
     gap: 8px;
     padding: 10px 12px 12px;
     border-top: 1px solid var(--rule-soft);
+  }
+  .queue {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 4px;
+  }
+  .queue li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 5px 6px 5px 8px;
+    border-radius: var(--r-sm);
+    background: var(--accent-mist);
+    font-size: var(--t-sm);
+  }
+  .queue li.qinfo {
+    background: none;
+    padding: 0 2px;
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+  }
+  .qn {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 0.66rem;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--paper);
+  }
+  .qt {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .qa {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    color: var(--ink-3);
+  }
+  .qa:hover {
+    color: var(--accent);
+    background: var(--paper);
   }
   .ctl {
     display: flex;
