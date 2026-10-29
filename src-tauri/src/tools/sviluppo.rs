@@ -83,14 +83,29 @@ pub struct Opzioni {
     pub istruzioni: String,
     /// Cartelle fuori dal progetto in cui Claude può scrivere (es. le note dei progetti nella memoria)
     pub cartelle: Vec<PathBuf>,
+    /// Solo lettura (revisioni, pareri): niente modifiche ai file né comandi che cambiano lo stato
+    pub solo_lettura: bool,
 }
+
+/// Strumenti per chi deve solo leggere e verificare (il CTO che rivede, un secondo parere)
+const SOLO_LETTURA: &[&str] = &[
+    "Read", "Glob", "Grep", "WebFetch", "WebSearch", "TodoWrite",
+    "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)",
+    "Bash(npm test:*)", "Bash(npm run test:*)", "Bash(npm run lint:*)", "Bash(npm run check:*)", "Bash(npm run build:*)", "Bash(npx vitest:*)", "Bash(npx jest:*)", "Bash(npx tsc:*)", "Bash(npx eslint:*)", "Bash(npx svelte-check:*)",
+    "Bash(cargo test:*)", "Bash(cargo check:*)", "Bash(cargo clippy:*)", "Bash(go test:*)", "Bash(go vet:*)", "Bash(pytest:*)", "Bash(python3 -m pytest:*)", "Bash(dotnet test:*)", "Bash(swift test:*)",
+    "Bash(ls:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(wc:*)", "Bash(find:*)", "Bash(grep:*)", "Bash(rg:*)",
+];
 
 fn comando_headless(bin: &Path, cartella: &Path, messaggio: &str, sessione: Option<&str>, s: &crate::store::Settings) -> tokio::process::Command {
     comando_headless_con(bin, cartella, messaggio, sessione, s, &Opzioni::default())
 }
 
 pub(crate) fn comando_headless_con(bin: &Path, cartella: &Path, messaggio: &str, sessione: Option<&str>, s: &crate::store::Settings, o: &Opzioni) -> tokio::process::Command {
-    let mut consentiti: Vec<String> = CONSENTITI.iter().map(|x| x.to_string()).collect();
+    let mut consentiti: Vec<String> = if o.solo_lettura { SOLO_LETTURA } else { CONSENTITI }.iter().map(|x| x.to_string()).collect();
+    let mut vietati: Vec<String> = VIETATI.iter().map(|x| x.to_string()).collect();
+    if o.solo_lettura {
+        vietati.extend(["Edit", "Write", "MultiEdit", "NotebookEdit"].map(String::from));
+    }
     // Gli strumenti dei server MCP noti (in Claude Code o collegati qui) sono consentiti
     let mut server: Vec<String> = crate::mcp_client::nomi_claude_code();
     server.extend(s.mcp_servers.iter().filter(|x| x.enabled).map(|x| x.name.clone()));
@@ -103,11 +118,11 @@ pub(crate) fn comando_headless_con(bin: &Path, cartella: &Path, messaggio: &str,
     cmd.current_dir(cartella)
         .arg("-p")
         .arg(messaggio)
-        .args(["--output-format", "stream-json", "--verbose", "--chrome", "--permission-mode", if o.modo.is_empty() { "acceptEdits" } else { &o.modo }])
+        .args(["--output-format", "stream-json", "--verbose", "--chrome", "--permission-mode", if o.solo_lettura { "default" } else if o.modo.is_empty() { "acceptEdits" } else { &o.modo }])
         .arg("--allowedTools")
         .arg(consentiti.join(","))
         .arg("--disallowedTools")
-        .arg(VIETATI.join(","))
+        .arg(vietati.join(","))
         .arg("--append-system-prompt")
         .arg(format!(
             "Lavori su richiesta dell'utente tramite il suo assistente Oltremare, senza poter fare domande: decidi in modo ragionevole e dichiara le scelte. Non fare push. Alla fine scrivi un riepilogo breve: cosa hai cambiato, come verificarlo, cosa resta da fare.\nPer vedere e provare l'app (o navigare un sito) usa Claude in Chrome (strumenti mcp__claude-in-chrome__*): è il Chrome dell'utente, che ti guarda lavorare. Crea una scheda nuova e lavora lì, senza toccare le schede già aperte; alla fine lasciala sull'ultima pagina utile.{}",
@@ -743,7 +758,7 @@ pub async fn avvia_headless_con(app: &AppHandle, cartella: &Path, messaggio: &st
     let provider = if o.ambiente.iter().any(|(k, _)| k == "ANTHROPIC_BASE_URL") { "claudex" } else { "claude-code" };
     let titolo: String = messaggio.chars().take(80).collect();
     // Il lavoro fatto (non i piani) finisce nel diario del progetto in memoria
-    let memoria = (o.modo != "plan").then(|| crate::memoria::cartella(&s)).flatten();
+    let memoria = (o.modo != "plan" && !o.solo_lettura).then(|| crate::memoria::cartella(&s)).flatten();
     let richiesta = messaggio.to_string();
     let finito: std::sync::Arc<std::sync::Mutex<Option<(bool, String)>>> = Default::default();
     let (tx, rx) = tokio::sync::oneshot::channel::<String>();
@@ -783,7 +798,7 @@ pub async fn avvia_headless_con(app: &AppHandle, cartella: &Path, messaggio: &st
                     let sessione = sid.lock().map(|x| x.clone()).unwrap_or_default();
                     let stato = if v["is_error"].as_bool() == Some(true) { "error" } else { "done" };
                     if let Some(dir) = &memoria {
-                        let nome = cartella.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                        let nome = crate::studio::titolo_progetto(&crate::studio::radici(&app.state::<App>()), &cartella);
                         let _ = crate::memoria::lavoro_progetto(dir, &nome, &cartella, &richiesta, v["result"].as_str().unwrap_or_default(), stato == "done");
                     }
                     let _ = app.state::<App>().db.registra_esterna(

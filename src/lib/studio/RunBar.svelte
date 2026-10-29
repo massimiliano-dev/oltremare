@@ -2,39 +2,41 @@
   // Avvio delle app in locale: il comando principale a un clic, gli altri in un menu, i processi accesi con stop e anteprima.
   import Icon from "../Icon.svelte";
   import { api, errorText } from "../api";
-  import { dev } from "../state/dev.svelte";
   import { studio } from "../state/studio.svelte";
   import { ui } from "../state/ui.svelte";
+  import type { Workspace as WS } from "../state/workspace.svelte";
+
+  let { ws }: { ws: WS } = $props();
 
   type Cmd = { label: string; command: string; cwd: string; rel: string; kind: string; priority: number };
   let cmds = $state<Cmd[]>([]);
   let menu = $state(false);
   let busy = $state<string | null>(null);
   const primary = $derived(cmds.find((c) => c.kind !== "setup" && c.kind !== "task") ?? cmds[0] ?? null);
-  const running = $derived(dev.processes.filter((p) => p.running));
+  const running = $derived(ws.dev.processes.filter((p) => p.running));
 
   $effect(() => {
-    const p = studio.project?.path;
+    const p = ws.project?.path;
     cmds = [];
     if (p) api.studioCommands(p).then((c) => (cmds = c)).catch(() => (cmds = []));
   });
 
   async function launch(c: Cmd) {
-    if (!studio.project) return;
+    if (!ws.project) return;
     menu = false;
     busy = c.command + c.cwd;
     try {
-      await api.studioLaunch(studio.project.path, c.cwd, c.command, c.label);
-      await dev.refreshProcesses();
-      const p = dev.processes.find((x) => x.name === c.label);
-      if (p) dev.bottom = p.id;
+      await api.studioLaunch(ws.project.path, c.cwd, c.command, c.label);
+      await ws.dev.refreshProcesses();
+      const p = ws.dev.processes.find((x) => x.name === c.label);
+      if (p) ws.dev.bottom = p.id;
       if (p?.urls.length) {
-        dev.previewUrl = p.urls[0];
-        dev.tab = "preview";
+        ws.dev.previewUrl = p.urls[0];
+        ws.dev.tab = "preview";
       }
     } catch (e) {
       ui.toast(errorText(e), "error");
-      dev.refreshProcesses();
+      ws.dev.refreshProcesses();
     } finally {
       busy = null;
     }
@@ -42,7 +44,7 @@
 
   async function stop(id: string) {
     await api.studioStop(id).catch((e) => ui.toast(errorText(e), "error"));
-    dev.refreshProcesses();
+    ws.dev.refreshProcesses();
   }
 
   const ICON: Record<string, string> = { tauri: "cpu", web: "globe", docker: "layers", rust: "terminal", python: "terminal", flutter: "image", dotnet: "terminal", go: "terminal", task: "check", setup: "download" };
@@ -52,8 +54,8 @@
   {#each running as p (p.id)}
     <span class="proc">
       <span class="led"></span>
-      <button class="pn" onclick={() => { dev.bottom = p.id; }} title={p.command}>{p.name}</button>
-      {#if p.urls[0]}<button class="pa" onclick={() => { dev.previewUrl = p.urls[0]; dev.tab = "preview"; }} title="Apri l'anteprima">{p.urls[0].replace(/^https?:\/\//, "").replace(/\/$/, "")}</button>{/if}
+      <button class="pn" onclick={() => { ws.dev.bottom = p.id; }} title={p.command}>{p.name}</button>
+      {#if p.urls[0]}<button class="pa" onclick={() => { ws.dev.previewUrl = p.urls[0]; ws.dev.tab = "preview"; }} title="Apri l'anteprima">{p.urls[0].replace(/^https?:\/\//, "").replace(/\/$/, "")}</button>{/if}
       <button class="px" onclick={() => stop(p.id)} title="Ferma" aria-label="Ferma {p.name}"><Icon name="stop" size={10} /></button>
     </span>
   {/each}
@@ -75,7 +77,7 @@
         </div>
       {/if}
     </div>
-  {:else if studio.project}
+  {:else if ws.project}
     <span class="none" title="Nessun comando di avvio riconosciuto">Nessun avvio trovato</span>
   {/if}
 </div>

@@ -6,6 +6,10 @@
   import { studio } from "../state/studio.svelte";
   import { ui } from "../state/ui.svelte";
   import { markdown } from "../markdown";
+  import { getContext } from "svelte";
+  import type { Workspace as WS } from "../state/workspace.svelte";
+
+  const ws = getContext<WS>("ws");
 
   let info = $state<{ link: { server: string; project: string; name: string } | null; servers: string[]; canImport: boolean } | null>(null);
   let issues = $state<{ key: string; title: string; status: string; extra: string | null }[]>([]);
@@ -15,7 +19,7 @@
   let loading = $state(false);
   let open = $state(true);
   let detail = $state<{ key: string; text: string } | null>(null);
-  const path = $derived(studio.project?.path ?? "");
+  const path = $derived(ws.project?.path ?? "");
 
   async function load() {
     if (!path) return;
@@ -61,7 +65,7 @@
   }
 
   function work(i: { key: string; title: string }) {
-    studio.draft = `Lavora sulla issue ${i.key} («${i.title}»): leggila con il gestionale (anche documentazione e commenti), segna l'inizio del lavoro, implementa, verifica e fai il commit con la chiave della issue.`;
+    ws.draft = `Lavora sulla issue ${i.key} («${i.title}»): leggila con il gestionale (anche documentazione e commenti), segna l'inizio del lavoro, implementa, verifica e fai il commit con la chiave della issue.`;
     detail = null;
   }
 

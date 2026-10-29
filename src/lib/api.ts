@@ -201,6 +201,14 @@ export interface StudioDecision {
   source: string;
 }
 
+export interface StudioReview {
+  esito: "approvato" | "da correggere" | "sconosciuto";
+  voto: number | null;
+  sintesi: string;
+  testo?: string;
+  problemi: { gravita: "bloccante" | "importante" | "minore"; file: string; riga: number; problema: string; correzione: string }[];
+}
+
 export interface ClaudexInfo {
   installed: boolean;
   profiles: { name: string; provider: string; model: string }[];
@@ -580,6 +588,8 @@ export const api = {
   studioOpen: (project?: string, prompt?: string) => invoke<void>("studio_open", { project, prompt }),
   studioClassify: (project: string, text: string) => invoke<StudioDecision>("studio_classify", { project, text }),
   studioClaudex: () => invoke<ClaudexInfo>("studio_claudex"),
+  studioReview: (project: string, text: string, model: string, profile?: string) => invoke<{ session: string }>("studio_review", { project, text, model, profile }),
+  studioReviewResult: (project: string, session: string) => invoke<StudioReview>("studio_review_result", { project, session }),
   studioRun: (project: string, text: string, model: string, plan: boolean, profile?: string, session?: string, newSession?: boolean) =>
     invoke<{ session: string; plan: boolean }>("studio_run", { project, text, model, plan, profile, session, newSession }),
   studioPlan: (project: string, session: string) => invoke<{ plan: string }>("studio_plan", { project, session }),
@@ -596,6 +606,7 @@ export const api = {
   termClose: (id: string) => invoke<void>("term_close", { id }),
   memoryInfo: (project?: string) => invoke<MemoryInfo>("memory_info", { project }),
   memoryOpen: (path?: string) => invoke<void>("memory_open", { path }),
+  memorySeed: () => invoke<number>("memory_seed"),
   gitState: (project: string) => invoke<GitState>("git_state", { project }),
   gitDiff: (project: string, staged: boolean, file?: string) => invoke<string>("git_diff", { project, file, staged }),
   gitStage: (project: string, files: string[]) => invoke<void>("git_stage", { project, files }),

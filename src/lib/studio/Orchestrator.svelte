@@ -4,12 +4,16 @@
   import { tick } from "svelte";
   import Icon from "../Icon.svelte";
   import { markdown } from "../markdown";
-  import { dev } from "../state/dev.svelte";
   import { studio, type Task } from "../state/studio.svelte";
+  import { secondReviewer } from "../state/workspace.svelte";
   import { settings } from "../state/settings.svelte";
   import ToolGlyph, { toolKind, TOOL_LABEL } from "./ToolGlyph.svelte";
   import FileIcon from "../dev/FileIcon.svelte";
   import { api, type DevItem } from "../api";
+  import { getContext } from "svelte";
+  import type { Workspace as WS } from "../state/workspace.svelte";
+
+  const ws = getContext<WS>("ws");
 
   let { prompt = "" }: { prompt?: string } = $props();
   let text = $state("");
@@ -20,7 +24,7 @@
 
   const KIND: Record<string, string> = { domanda: "Domanda", piccola: "Modifica piccola", media: "Lavoro medio", grande: "Lavoro grande" };
   const MODEL: Record<string, string> = { haiku: "Haiku", sonnet: "Sonnet", opus: "Opus", fable: "Fable", auto: "Auto" };
-  const items = $derived(dev.session?.items ?? []);
+  const items = $derived(ws.dev.session?.items ?? []);
   /** Le azioni consecutive di Claude si raggruppano in un blocco con la guida di rientro */
   const blocks = $derived.by(() => {
     const out: { kind: "user" | "text" | "tools"; start: number; items: DevItem[] }[] = [];
@@ -43,29 +47,29 @@
     const name = parts.pop() ?? t;
     return { name, dir: parts.slice(-2).join("/") };
   }
-  const running = $derived(!!dev.session?.running);
+  const running = $derived(!!ws.dev.session?.running);
   const profiles = $derived(studio.claudex?.profiles ?? []);
   const aiName = (p: string) => (p ? p : "Claude");
 
   // I compiti si salvano per progetto: riaprendolo, la conversazione continua
   $effect(() => {
-    void JSON.stringify(studio.tasks);
-    void studio.fresh;
-    studio.persist();
+    void JSON.stringify(ws.tasks);
+    void ws.fresh;
+    ws.persist();
   });
 
   // Fine del lavoro di Claude: piano pronto o lavoro concluso
   let prima = false;
   $effect(() => {
     const r = running;
-    if (prima && !r) studio.onFinished();
+    if (prima && !r) ws.onFinished();
     prima = r;
   });
 
   // Si scende in fondo quando arrivano messaggi
   $effect(() => {
     void items.length;
-    void studio.lastTask?.phase;
+    void ws.lastTask?.phase;
     tick().then(() => {
       if (scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 200) scroller.scrollTop = scroller.scrollHeight;
     });
@@ -76,9 +80,9 @@
     if (prompt) text = prompt;
   });
   $effect(() => {
-    if (studio.draft) {
-      text = studio.draft;
-      studio.draft = "";
+    if (ws.draft) {
+      text = ws.draft;
+      ws.draft = "";
     }
   });
 
@@ -87,12 +91,12 @@
     if (!t) return;
     text = "";
     // Claude sta lavorando (o c'è già una coda): il messaggio aspetta il suo turno
-    if (studio.busy || studio.queue.length) {
-      studio.enqueue(t);
-      studio.drain();
+    if (ws.busy || ws.queue.length) {
+      ws.enqueue(t);
+      ws.drain();
       return;
     }
-    await studio.send(t, nuova);
+    await ws.send(t, nuova);
   }
 
   function key(e: KeyboardEvent) {
@@ -111,9 +115,13 @@
       case "plan-ready":
         return "Piano pronto: approvalo o chiedi modifiche";
       case "working":
-        return `Al lavoro con ${MODEL[t.model] ?? t.model}${t.profile ? ` (${t.profile})` : ""}…`;
+        return `${t.fixRounds ? "Correzioni in corso" : "Al lavoro"} con ${MODEL[t.model] ?? t.model}${t.profile ? ` (${t.profile})` : ""}…`;
+      case "reviewing":
+        return t.reviews?.length ? `${secondReviewer(t.profile)?.name ?? "Un'altra AI"} rivede le modifiche…` : `Il CTO (${t.model === "fable" ? "Fable" : "Opus"}) rivede le modifiche…`;
+      case "review-ready":
+        return "Il CTO chiede ancora correzioni: decidi tu";
       case "done":
-        return "Fatto";
+        return t.review?.esito === "approvato" ? `Fatto · approvato dal CTO${t.review.voto ? ` (${t.review.voto}/10)` : ""}` : "Fatto";
       case "error":
         return t.error ?? "Errore";
     }
@@ -124,21 +132,21 @@
   <header>
     <span class="hicon"><Icon name="spark" size={14} /></span>
     <strong>Orchestratore</strong>
-    {#if running}<span class="live"><span class="pulse"></span>{dev.session?.stuck ? "fermo" : "al lavoro"}</span>{/if}
+    {#if running}<span class="live"><span class="pulse"></span>{ws.dev.session?.stuck ? "fermo" : "al lavoro"}</span>{/if}
     <span class="sp"></span>
-    {#if running && dev.session?.here}
-      <button class="icon-btn" title="Ferma Claude" aria-label="Ferma" onclick={() => dev.stopClaude()}><Icon name="stop" size={14} /></button>
+    {#if running && ws.dev.session?.here}
+      <button class="icon-btn" title="Ferma Claude" aria-label="Ferma" onclick={() => ws.dev.stopClaude()}><Icon name="stop" size={14} /></button>
     {/if}
-    {#if studio.memoryNote}
-      <button class="icon-btn" title="Memoria del progetto: com'è fatto, decisioni, diario dei lavori (si apre in Obsidian)" aria-label="Memoria del progetto" onclick={() => api.memoryOpen(studio.memoryNote ?? undefined)}><Icon name="book" size={15} /></button>
+    {#if ws.memoryNote}
+      <button class="icon-btn" title="Memoria del progetto: com'è fatto, decisioni, diario dei lavori (si apre in Obsidian)" aria-label="Memoria del progetto" onclick={() => api.memoryOpen(ws.memoryNote ?? undefined)}><Icon name="book" size={15} /></button>
     {/if}
-    <button class="icon-btn" title="Nuova conversazione" aria-label="Nuova conversazione" onclick={() => { studio.newConversation(); text = ""; }}><Icon name="plus" size={15} /></button>
+    <button class="icon-btn" title="Nuova conversazione" aria-label="Nuova conversazione" onclick={() => { ws.newConversation(); text = ""; }}><Icon name="plus" size={15} /></button>
   </header>
 
   <div class="msgs" bind:this={scroller}>
-    {#if !items.length && !studio.tasks.length}
+    {#if !items.length && !ws.tasks.length}
       <div class="intro">
-        <p>Scrivi cosa vuoi fare su <strong>{studio.project?.name}</strong>. L'orchestratore decide se serve un piano e quale modello usare:</p>
+        <p>Scrivi cosa vuoi fare su <strong>{ws.project?.name}</strong>. L'orchestratore decide se serve un piano e quale modello usare:</p>
         <ul>
           <li><b>Haiku</b> per le modifiche piccole e ovvie</li>
           <li><b>Sonnet</b> per domande e lavori circoscritti</li>
@@ -181,11 +189,11 @@
       {/if}
     {/each}
 
-    {#if studio.lastTask}
-      {@const t = studio.lastTask}
+    {#if ws.lastTask}
+      {@const t = ws.lastTask}
       <div class="task ph-{t.phase}">
         <div class="trow">
-          {#if t.phase === "deciding" || t.phase === "planning" || t.phase === "working"}<span class="spin"></span>{:else if t.phase === "error"}<Icon name="alert" size={14} />{:else}<Icon name="check" size={14} />{/if}
+          {#if t.phase === "deciding" || t.phase === "planning" || t.phase === "working" || t.phase === "reviewing"}<span class="spin"></span>{:else if t.phase === "error"}<Icon name="alert" size={14} />{:else if t.phase === "review-ready"}<Icon name="shield" size={14} />{:else}<Icon name="check" size={14} />{/if}
           <span>{fase(t)}</span>
         </div>
         {#if t.decision}
@@ -204,15 +212,53 @@
           </div>
           <textarea class="input" rows="2" bind:value={notes} placeholder="Indicazioni sul piano (facoltative)"></textarea>
           <div class="pact">
-            <button class="btn btn-primary sm" onclick={() => { studio.approve(t, notes); notes = ""; }}><Icon name="play" size={12} /> Approva ed esegui</button>
+            <button class="btn btn-primary sm" onclick={() => { ws.approve(t, notes); notes = ""; }}><Icon name="play" size={12} /> Approva ed esegui</button>
             <select class="input sel" bind:value={t.model} aria-label="Modello per l'esecuzione">
               <option value="haiku">con Haiku</option>
               <option value="sonnet">con Sonnet</option>
               <option value="opus">con Opus</option>
               <option value="fable">con Fable</option>
             </select>
-            <button class="btn btn-quiet sm" disabled={!notes.trim()} onclick={() => { studio.replan(t, notes); notes = ""; }}>Rifai il piano</button>
+            <button class="btn btn-quiet sm" disabled={!notes.trim()} onclick={() => { ws.replan(t, notes); notes = ""; }}>Rifai il piano</button>
           </div>
+        {/if}
+
+        {#if t.phase === "reviewing" && t.reviews?.length}
+          <small class="why">Il CTO ha finito: ora rivede anche {secondReviewer(t.profile)?.name ?? "un'altra AI"}…</small>
+        {/if}
+        {#if t.reviews?.length && t.phase !== "reviewing" && t.phase !== "working"}
+          {#each t.reviews as rv, ri (ri)}
+            {@const r = rv.review}
+            <div class="review" class:ko={r.esito === "da correggere"} class:unk={r.esito === "sconosciuto"}>
+              <div class="rhead">
+                <span class="rbadge"><Icon name={ri === 0 ? "shield" : "users"} size={12} /> {rv.who}</span>
+                <strong>{r.esito === "approvato" ? "Approvato" : r.esito === "da correggere" ? "Da correggere" : "Giudizio in prosa"}</strong>
+                {#if r.voto}<span class="voto" style="--v:{r.voto}">{r.voto}<small>/10</small></span>{/if}
+              </div>
+              {#if r.sintesi}<p class="rsum">{r.sintesi}</p>{:else if r.esito === "sconosciuto" && r.testo}<p class="rsum">{r.testo}</p>{/if}
+              {#if r.problemi.length}
+                <ul class="issues">
+                  {#each r.problemi as p, i (i)}
+                    <li class="g-{p.gravita}">
+                      <em>{p.gravita}</em>
+                      <div>
+                        {#if p.file}<code>{p.file}{p.riga ? `:${p.riga}` : ""}</code>{/if}
+                        <span>{p.problema}</span>
+                        {#if p.correzione}<small>→ {p.correzione}</small>{/if}
+                      </div>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+            </div>
+          {/each}
+          {#if t.fixRounds}<small class="why">Le correzioni sono già partite da sole {t.fixRounds === 1 ? "una volta" : `${t.fixRounds} volte`}.</small>{/if}
+          {#if t.phase === "review-ready" && t.review}
+            <div class="pact">
+              <button class="btn btn-primary sm" onclick={() => ws.fix(t)}><Icon name="pen" size={12} /> Fai correggere ({t.review.problemi.filter((p) => p.gravita !== "minore").length})</button>
+              <button class="btn btn-quiet sm" onclick={() => ws.accept(t)}>Va bene così</button>
+            </div>
+          {/if}
         {/if}
 
         {#if studio.claudex?.installed && profiles.length && (t.phase === "plan-ready" || t.phase === "done")}
@@ -223,7 +269,7 @@
               <option value="" disabled>scegli un'AI</option>
               {#each profiles as p (p.name)}<option value={p.name}>{p.name}</option>{/each}
             </select>
-            <button class="btn btn-line sm" disabled={!opinionProfile || t.opinion === "…"} onclick={() => studio.opinion(t, opinionProfile, t.phase === "plan-ready" ? "plan" : "diff")}>Chiedi</button>
+            <button class="btn btn-line sm" disabled={!opinionProfile || t.opinion === "…"} onclick={() => ws.opinion(t, opinionProfile, t.phase === "plan-ready" ? "plan" : "diff")}>Chiedi</button>
           </div>
         {/if}
         {#if t.opinion}
@@ -236,25 +282,25 @@
   </div>
 
   <div class="composer">
-    {#if studio.queue.length}
+    {#if ws.queue.length}
       <ol class="queue" aria-label="Messaggi in coda">
-        {#each studio.queue as q, i (q.id)}
+        {#each ws.queue as q, i (q.id)}
           <li>
             <span class="qn">{i + 1}</span>
             <span class="qt" title={q.text}>{q.text}</span>
-            <button class="qa" onclick={() => { studio.unqueue(q.id); text = q.text; }} title="Riporta nel campo per modificarlo" aria-label="Modifica"><Icon name="pen" size={12} /></button>
-            <button class="qa" onclick={() => studio.sendNow(q.id)} title={running ? "Interrompi il lavoro in corso e invialo subito" : "Invialo subito"} aria-label="Invia subito"><Icon name="bolt" size={12} /></button>
-            <button class="qa" onclick={() => studio.unqueue(q.id)} title="Togli dalla coda" aria-label="Togli"><Icon name="x" size={12} /></button>
+            <button class="qa" onclick={() => { ws.unqueue(q.id); text = q.text; }} title="Riporta nel campo per modificarlo" aria-label="Modifica"><Icon name="pen" size={12} /></button>
+            <button class="qa" onclick={() => ws.sendNow(q.id)} title={running ? "Interrompi il lavoro in corso e invialo subito" : "Invialo subito"} aria-label="Invia subito"><Icon name="bolt" size={12} /></button>
+            <button class="qa" onclick={() => ws.unqueue(q.id)} title="Togli dalla coda" aria-label="Togli"><Icon name="x" size={12} /></button>
           </li>
         {/each}
-        <li class="qinfo">{studio.lastTask?.phase === "plan-ready" ? "In attesa: partono dopo che hai approvato il piano e Claude ha finito" : "Partono in ordine appena Claude finisce"}</li>
+        <li class="qinfo">{ws.lastTask?.phase === "plan-ready" ? "In attesa: partono dopo che hai approvato il piano e Claude ha finito" : "Partono in ordine appena Claude finisce"}</li>
       </ol>
     {/if}
-    <textarea class="input" rows="3" bind:value={text} onkeydown={key} placeholder={studio.busy ? "Claude sta lavorando: scrivi pure, il messaggio va in coda" : `Cosa facciamo su ${studio.project?.name ?? "questo progetto"}?`}></textarea>
+    <textarea class="input" rows="3" bind:value={text} onkeydown={key} placeholder={ws.busy ? "Claude sta lavorando: scrivi pure, il messaggio va in coda" : `Cosa facciamo su ${ws.project?.name ?? "questo progetto"}?`}></textarea>
     <div class="ctl">
-      <label title="Modello: Auto lascia scegliere all'orchestratore" style="--h:{MODEL_HUE[studio.modelChoice]}">
+      <label title="Modello: Auto lascia scegliere all'orchestratore" style="--h:{MODEL_HUE[ws.modelChoice]}">
         <Icon name="cpu" size={13} />
-        <select bind:value={studio.modelChoice} aria-label="Modello">
+        <select bind:value={ws.modelChoice} aria-label="Modello">
           <option value="auto">Modello auto</option>
           <option value="haiku">Haiku</option>
           <option value="sonnet">Sonnet</option>
@@ -264,24 +310,36 @@
       </label>
       <label title="Piano: Auto decide in base alla richiesta" style="--h:285">
         <Icon name="all" size={13} />
-        <select bind:value={studio.planChoice} aria-label="Piano">
+        <select bind:value={ws.planChoice} aria-label="Piano">
           <option value="auto">Piano auto</option>
           <option value="yes">Sempre piano</option>
           <option value="no">Senza piano</option>
         </select>
       </label>
-      <label title="Quale AI fa il lavoro" style="--h:{studio.profile ? 35 : 275}">
+      <label title="Revisione dopo ogni lavoro: il CTO (Claude Opus) e, se c'è un'altra AI in Claudex, anche lei. Auto rivede tutto tranne le domande" style="--h:{ws.reviewChoice === 'no' ? 0 : 150}">
+        <Icon name="shield" size={13} />
+        <select bind:value={ws.reviewChoice} aria-label="Revisione del CTO">
+          <option value="auto">CTO auto</option>
+          <option value="yes">CTO sempre</option>
+          <option value="no">Senza CTO</option>
+        </select>
+      </label>
+      <label title="Quale AI fa il lavoro" style="--h:{ws.profile ? 35 : 275}">
         <Icon name="spark" size={13} />
-        <select bind:value={studio.profile} aria-label="AI">
+        <select bind:value={ws.profile} aria-label="AI">
           <option value="">Claude</option>
           {#each profiles as p (p.name)}<option value={p.name}>{p.name}{p.model ? ` · ${p.model}` : ""}</option>{/each}
         </select>
       </label>
       <span class="sp"></span>
-      <button class="btn btn-primary sm" onclick={() => send()} disabled={!text.trim()}>{studio.busy ? "Accoda" : "Invia"}</button>
+      <button class="btn btn-primary sm" onclick={() => send()} disabled={!text.trim()}>{ws.busy ? "Accoda" : "Invia"}</button>
     </div>
     {#if studio.claudex && !studio.claudex.installed}
       <small class="hint">Altre AI (Codex, Gemini, Grok, DeepSeek, locali): installa <a href="https://github.com/StringKe/claudex" target="_blank" rel="noreferrer">Claudex</a> e configura i profili; compaiono qui.</small>
+    {:else if studio.claudex?.installed && !profiles.length}
+      <small class="hint">Claudex è installato ma senza profili: aggiungili con <code>claudex profile add</code> (o in ~/.config/claudex/config.toml) e torna qui.</small>
+    {:else if profiles.length && !ws.profile}
+      <small class="hint">Altre AI via Claudex nel menu qui sopra: {profiles.map((p) => p.name).join(", ")}.</small>
     {/if}
   </div>
 </section>
@@ -575,6 +633,111 @@
     padding: 0 10px;
     font-size: var(--t-xs);
     gap: 5px;
+  }
+  .task.ph-review-ready {
+    box-shadow: inset 0 0 0 1.5px var(--warn);
+  }
+  .review {
+    display: grid;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: var(--r-sm);
+    background: var(--paper);
+    font-size: var(--t-sm);
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ok) 35%, transparent);
+  }
+  .review.ko {
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--warn) 55%, transparent);
+  }
+  .review.unk {
+    box-shadow: inset 0 0 0 1px var(--rule);
+  }
+  .rhead {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .rbadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 12%, transparent);
+  }
+  .voto {
+    margin-left: auto;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+    color: oklch(0.5 0.14 calc(20 + var(--v) * 13));
+  }
+  .voto small {
+    font-weight: 500;
+    color: var(--ink-3);
+  }
+  .rounds {
+    color: var(--ink-3);
+    font-size: var(--t-xs);
+  }
+  .rsum {
+    margin: 0;
+    color: var(--ink-2);
+    line-height: 1.45;
+  }
+  .issues {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+  }
+  .issues li {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 6px 8px;
+    border-radius: 7px;
+    background: var(--paper-2);
+  }
+  .issues em {
+    flex: none;
+    min-width: 72px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    text-align: center;
+    font-style: normal;
+    font-size: 0.64rem;
+    font-weight: 750;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .g-bloccante em {
+    color: var(--danger);
+    background: var(--danger-wash);
+  }
+  .g-importante em {
+    color: var(--warn-ink);
+    background: oklch(0.8 0.12 80 / 0.3);
+  }
+  .g-minore em {
+    color: var(--ink-3);
+    background: var(--paper-3);
+  }
+  .issues div {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  .issues code {
+    font-size: 0.72rem;
+    color: var(--accent);
+  }
+  .issues small {
+    color: var(--ink-3);
   }
   .opinion {
     display: grid;

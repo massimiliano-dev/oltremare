@@ -304,6 +304,13 @@ export function installPreview() {
         case "memory_info":
           return { enabled: true, path: "/Users/demo/Desktop/Obsidian", ready: true, notes: 23, obsidian: true, projectNote: a.project ? "/Users/demo/Desktop/Obsidian/Progetti/negozio.md" : null, suggested: null };
         case "memory_open": return null;
+        case "memory_seed": return 82;
+        case "studio_review": return { session: "rev1" };
+        case "studio_review_result":
+          return { esito: "da correggere", voto: 6, sintesi: "Buona struttura, ma lo sconto si applica anche a importi negativi e manca il test del codice non valido.", testo: "", problemi: [
+            { gravita: "importante", file: "src/sconti.ts", riga: 3, problema: "applicaSconto accetta importi negativi e restituisce un totale negativo.", correzione: "Limita il lordo a 0 prima di applicare la percentuale." },
+            { gravita: "minore", file: "tests/sconti.test.ts", riga: 1, problema: "Manca il caso del codice sconto sconosciuto.", correzione: "Aggiungi un test che verifichi che il totale resti invariato." },
+          ] };
         case "term_open": return "t1";
         case "term_write": case "term_resize": case "term_close": return null;
         case "git_state": {

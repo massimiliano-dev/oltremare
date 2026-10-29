@@ -4,36 +4,36 @@
   import { cubicOut } from "svelte/easing";
   import FileIcon from "./FileIcon.svelte";
   import FileTree from "./FileTree.svelte";
-  import { dev } from "../state/dev.svelte";
+  import { dev as principale, type DevState } from "../state/dev.svelte";
 
-  let { path, depth = 0, onopen, active = null }: { path: string; depth?: number; onopen?: (p: string) => void; active?: string | null } = $props();
-  const entries = $derived(dev.tree[path] ?? []);
-  const apri = (p: string) => (onopen ? onopen(p) : dev.openFile(p));
-  const corrente = $derived(active ?? dev.file?.path ?? null);
+  let { path, depth = 0, onopen, active = null, dev: d = principale }: { path: string; depth?: number; onopen?: (p: string) => void; active?: string | null; dev?: DevState } = $props();
+  const entries = $derived(d.tree[path] ?? []);
+  const apri = (p: string) => (onopen ? onopen(p) : d.openFile(p));
+  const corrente = $derived(active ?? d.file?.path ?? null);
   const STATUS: Record<string, string> = { M: "modificato", A: "aggiunto", D: "eliminato", "??": "nuovo", R: "rinominato" };
   const ridotto = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   // Una cartella è «cambiata» se contiene file cambiati
-  const cambiate = (p: string) => [...dev.changed.keys()].filter((c) => c.startsWith(p + "/") || c.startsWith(p + "\\")).length;
+  const cambiate = (p: string) => [...d.changed.keys()].filter((c) => c.startsWith(p + "/") || c.startsWith(p + "\\")).length;
 </script>
 
 <ul class="level" style="--d:{depth}" role={depth === 0 ? "tree" : "group"}>
   {#each entries as e (e.path)}
-    {@const st = dev.changed.get(e.path)}
-    <li role="treeitem" aria-expanded={e.dir ? !!dev.expanded[e.path] : undefined} aria-selected={!e.dir && corrente === e.path}>
+    {@const st = d.changed.get(e.path)}
+    <li role="treeitem" aria-expanded={e.dir ? !!d.expanded[e.path] : undefined} aria-selected={!e.dir && corrente === e.path}>
       {#if e.dir}
         {@const n = cambiate(e.path)}
-        <button class="row dir" class:open={dev.expanded[e.path]} onclick={() => dev.toggleDir(e.path)}>
+        <button class="row dir" class:open={d.expanded[e.path]} onclick={() => d.toggleDir(e.path)}>
           <svg class="chev" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 2 6.5 5l-3 3" /></svg>
-          <FileIcon name={e.name} folder open={!!dev.expanded[e.path]} />
+          <FileIcon name={e.name} folder open={!!d.expanded[e.path]} />
           <span class="name">{e.name}</span>
           {#if n}<span class="cnt" title="{n} file cambiati">{n}</span>{/if}
         </button>
-        {#if dev.expanded[e.path]}
+        {#if d.expanded[e.path]}
           <div transition:slide={{ duration: ridotto ? 0 : 160, easing: cubicOut }}>
-            {#if dev.tree[e.path] && !dev.tree[e.path].length}
+            {#if d.tree[e.path] && !d.tree[e.path].length}
               <p class="vuota" style="--d:{depth + 1}">cartella vuota</p>
             {:else}
-              <FileTree path={e.path} depth={depth + 1} {onopen} {active} />
+              <FileTree path={e.path} depth={depth + 1} {onopen} {active} dev={d} />
             {/if}
           </div>
         {/if}

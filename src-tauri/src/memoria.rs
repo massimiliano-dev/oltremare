@@ -264,11 +264,23 @@ pub fn diario(dir: &Path, titolo: &str, testo: &str) -> Result<(), String> {
 
 /// Nota di un progetto dello Studio (Progetti/<nome>): la crea con le sezioni se manca.
 pub fn nota_progetto(dir: &Path, progetto: &str, cartella: &Path) -> Result<PathBuf, String> {
+    let mut titolo = progetto.to_string();
     let nota = format!("Progetti/{}", nome_file(progetto));
     if let Some(p) = risolvi(dir, &nota) {
-        return Ok(p);
+        // Due progetti con lo stesso nome: la nota dice di quale cartella è
+        let t = std::fs::read_to_string(&p).unwrap_or_default();
+        let altra = t.lines().take(8).find_map(|l| l.strip_prefix("cartella: ")).map(|c| c.trim() != cartella.display().to_string()).unwrap_or(false);
+        if !altra {
+            return Ok(p);
+        }
+        let madre = cartella.parent().and_then(|m| m.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        titolo = format!("{progetto} ({madre})");
+        if let Some(p) = risolvi(dir, &format!("Progetti/{}", nome_file(&titolo))) {
+            return Ok(p);
+        }
     }
-    let p = dir.join(format!("{nota}.md"));
+    let progetto = titolo.as_str();
+    let p = dir.join(format!("Progetti/{}.md", nome_file(progetto)));
     if let Some(c) = p.parent() {
         std::fs::create_dir_all(c).map_err(|e| e.to_string())?;
     }

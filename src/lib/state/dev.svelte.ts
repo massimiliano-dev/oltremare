@@ -5,7 +5,10 @@ import { ui } from "./ui.svelte";
 
 const KEY = "oltremare:dev-folder";
 
-class DevState {
+export class DevState {
+  /** Le istanze dello Studio (una per scheda) non toccano la cartella ricordata dalla finestra principale */
+  constructor(private remember = true) {}
+
   folder = $state<string | null>(null);
   recent = $state<string[]>([]);
   tree = $state<Record<string, DevEntry[]>>({});
@@ -23,6 +26,7 @@ class DevState {
   bottom = $state<string | null>(null);
   private timers: ReturnType<typeof setInterval>[] = [];
   private suggested = new Set<string>();
+  private unwatch: (() => void) | null = null;
 
   changed = $derived(new Map((this.git?.changes ?? []).map((c) => [c.path, c.status])));
   urls = $derived([...new Set(this.processes.flatMap((p) => p.urls))]);
@@ -60,12 +64,22 @@ class DevState {
   stop() {
     for (const t of this.timers) clearInterval(t);
     this.timers = [];
+    this.unwatch?.();
+    this.unwatch = null;
+  }
+
+  /** Segue la sessione di Claude di questa cartella (per le istanze che non passano da init). */
+  async watch() {
+    this.unwatch?.();
+    this.unwatch = await on("dev-session", ({ folder }) => {
+      if (folder === this.folder) this.refreshSession();
+    });
   }
 
   async open(folder: string) {
     try {
       this.folder = await api.devOpen(folder);
-      localStorage.setItem(KEY, this.folder);
+      if (this.remember) localStorage.setItem(KEY, this.folder);
     } catch (e) {
       ui.toast(errorText(e), "error");
       return;

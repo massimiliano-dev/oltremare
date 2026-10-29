@@ -8,11 +8,13 @@
   import SourceControl from "./SourceControl.svelte";
   import DiffViewer from "./DiffViewer.svelte";
   import Terminal from "./Terminal.svelte";
-  import { git } from "../state/git.svelte";
-  import { dev } from "../state/dev.svelte";
-  import { studio } from "../state/studio.svelte";
+  import { setContext } from "svelte";
+  import type { Workspace as WS } from "../state/workspace.svelte";
 
-  let { prompt = "" }: { prompt?: string } = $props();
+  let { ws }: { ws: WS } = $props();
+  // Lo spazio di lavoro di questa scheda non cambia mai (StudioApp ne monta uno per scheda)
+  // svelte-ignore state_referenced_locally
+  setContext("ws", ws);
   let frame: HTMLIFrameElement | undefined = $state();
   let bottomOpen = $state(true);
 
@@ -29,12 +31,12 @@
   };
   let left = $state(leggi("left"));
   let right = $state(leggi("right"));
-  let ws: HTMLElement | undefined = $state();
+  let grid: HTMLElement | undefined = $state();
   let dragging = $state<"left" | "right" | null>(null);
 
   function imposta(k: "left" | "right", v: number) {
     // Il centro tiene almeno 360 px
-    const spazio = (ws?.clientWidth ?? 1400) - (k === "left" ? right : left) - 360;
+    const spazio = (grid?.clientWidth ?? 1400) - (k === "left" ? right : left) - 360;
     const n = Math.round(Math.min(Math.max(v, LIM[k][0]), LIM[k][1], Math.max(spazio, LIM[k][0])));
     if (k === "left") left = n;
     else right = n;
@@ -44,12 +46,12 @@
   }
 
   function trascina(k: "left" | "right", e: PointerEvent) {
-    if (e.button !== 0 || !ws) return;
+    if (e.button !== 0 || !grid) return;
     e.preventDefault();
     const el = e.currentTarget as HTMLElement;
     el.setPointerCapture(e.pointerId);
     dragging = k;
-    const box = ws.getBoundingClientRect();
+    const box = grid.getBoundingClientRect();
     const muovi = (ev: PointerEvent) => imposta(k, k === "left" ? ev.clientX - box.left : box.right - ev.clientX);
     const fine = () => {
       dragging = null;
@@ -72,19 +74,19 @@
   // Terminali del progetto (la shell dell'utente) accanto ai processi avviati dall'orchestratore
   let terms = $state<{ id: number; name: string; ended: boolean }[]>([]);
   let termN = 0;
-  const termSel = $derived(dev.bottom?.startsWith("term:") ? Number(dev.bottom.slice(5)) : null);
-  const proc = $derived(termSel != null ? null : (dev.processes.find((p) => p.id === dev.bottom) ?? dev.processes[0] ?? null));
+  const termSel = $derived(ws.dev.bottom?.startsWith("term:") ? Number(ws.dev.bottom.slice(5)) : null);
+  const proc = $derived(termSel != null ? null : (ws.dev.processes.find((p) => p.id === ws.dev.bottom) ?? ws.dev.processes[0] ?? null));
 
   function nuovoTerminale() {
     const id = ++termN;
     terms = [...terms, { id, name: terms.length ? `Terminale ${id}` : "Terminale", ended: false }];
-    dev.bottom = `term:${id}`;
+    ws.dev.bottom = `term:${id}`;
     bottomOpen = true;
   }
 
   function chiudiTerminale(id: number) {
     terms = terms.filter((t) => t.id !== id);
-    if (termSel === id) dev.bottom = terms.at(-1) ? `term:${terms.at(-1)!.id}` : null;
+    if (termSel === id) ws.dev.bottom = terms.at(-1) ? `term:${terms.at(-1)!.id}` : null;
   }
 
   // ⌃` mostra o nasconde il terminale, come negli editor
@@ -94,26 +96,16 @@
       if (!terms.length) nuovoTerminale();
       else if (termSel != null && bottomOpen) bottomOpen = false;
       else {
-        dev.bottom = `term:${(terms.find((t) => t.id === termSel) ?? terms.at(-1))!.id}`;
+        ws.dev.bottom = `term:${(terms.find((t) => t.id === termSel) ?? terms.at(-1))!.id}`;
         bottomOpen = true;
       }
     }
   }
-
-  // Cambiando progetto i terminali del progetto precedente si chiudono
-  let progettoTerm = "";
-  $effect(() => {
-    const p = studio.project?.path ?? "";
-    if (p !== progettoTerm) {
-      progettoTerm = p;
-      terms = [];
-    }
-  });
 </script>
 
 <svelte:window onkeydown={tasto} />
 
-<div class="ws" bind:this={ws} class:dragging style="--left:{left}px; --right:{right}px">
+<div class="ws" bind:this={grid} class:dragging style="--left:{left}px; --right:{right}px">
   <!-- Separatore che si sposta (ruolo ARIA «separator» con valore): è un controllo, si può mettere a fuoco -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <div class="gutter gl" class:on={dragging === "left"} role="separator" aria-orientation="vertical" aria-label="Larghezza dell'esplora file" aria-valuenow={left} aria-valuemin={LIM.left[0]} aria-valuemax={LIM.left[1]} tabindex="0" title="Trascina per allargare · doppio clic per tornare com'era" onpointerdown={(e) => trascina("left", e)} ondblclick={() => imposta("left", DEF.left)} onkeydown={(e) => tasti("left", e)}></div>
@@ -122,31 +114,31 @@
   <aside class="explorer">
     <IssuesPanel />
     <SourceControl />
-    <div class="sec"><Icon name="folder" size={12} /> {studio.project?.name ?? "Esplora"}</div>
-    {#if dev.folder}<FileTree path={dev.folder} onopen={(p) => studio.openFile(p)} active={dev.tab === "file" ? studio.active : null} />{/if}
+    <div class="sec"><Icon name="folder" size={12} /> {ws.project?.name ?? "Esplora"}</div>
+    {#if ws.dev.folder}<FileTree path={ws.dev.folder} dev={ws.dev} onopen={(p) => ws.openFile(p)} active={ws.dev.tab === "file" ? ws.active : null} />{/if}
   </aside>
 
   <section class="center">
     <div class="tabs">
-      {#each studio.files as f (f.path)}
-        <div class="tab" class:on={dev.tab === "file" && studio.active === f.path}>
-          <button class="tname" onclick={() => { studio.active = f.path; dev.tab = "file"; }} title={f.path}>{f.name}{#if f.content !== f.saved}<span class="dirty">●</span>{/if}</button>
-          <button class="tx" onclick={() => studio.closeFile(f.path)} aria-label="Chiudi {f.name}"><Icon name="x" size={11} /></button>
+      {#each ws.files as f (f.path)}
+        <div class="tab" class:on={ws.dev.tab === "file" && ws.active === f.path}>
+          <button class="tname" onclick={() => { ws.active = f.path; ws.dev.tab = "file"; }} title={f.path}>{f.name}{#if f.content !== f.saved}<span class="dirty">●</span>{/if}</button>
+          <button class="tx" onclick={() => ws.closeFile(f.path)} aria-label="Chiudi {f.name}"><Icon name="x" size={11} /></button>
         </div>
       {/each}
-      <div class="tab" class:on={dev.tab === "diff"}><button class="tname" onclick={() => git.showDiff(git.diffFile, git.diffStaged)}><Icon name="layers" size={12} /> Differenze{#if git.changed.length + git.staged.length}<span class="tcount">{git.changed.length + git.staged.length}</span>{/if}</button></div>
-      <div class="tab" class:on={dev.tab === "preview"}><button class="tname" onclick={() => (dev.tab = "preview")}><Icon name="globe" size={12} /> Anteprima{dev.urls.length ? ` · ${dev.urls.length}` : ""}</button></div>
+      <div class="tab" class:on={ws.dev.tab === "diff"}><button class="tname" onclick={() => ws.git.showDiff(ws.git.diffFile, ws.git.diffStaged)}><Icon name="layers" size={12} /> Differenze{#if ws.git.changed.length + ws.git.staged.length}<span class="tcount">{ws.git.changed.length + ws.git.staged.length}</span>{/if}</button></div>
+      <div class="tab" class:on={ws.dev.tab === "preview"}><button class="tname" onclick={() => (ws.dev.tab = "preview")}><Icon name="globe" size={12} /> Anteprima{ws.dev.urls.length ? ` · ${ws.dev.urls.length}` : ""}</button></div>
       <span class="tsp"></span>
-      <button class="tterm" onclick={() => (terms.length ? (dev.bottom = `term:${(terms.find((t) => t.id === termSel) ?? terms.at(-1))!.id}`, (bottomOpen = true)) : nuovoTerminale())} title="Terminale nella cartella del progetto (⌃`)"><Icon name="terminal" size={13} /> Terminale</button>
+      <button class="tterm" onclick={() => (terms.length ? (ws.dev.bottom = `term:${(terms.find((t) => t.id === termSel) ?? terms.at(-1))!.id}`, (bottomOpen = true)) : nuovoTerminale())} title="Terminale nella cartella del progetto (⌃`)"><Icon name="terminal" size={13} /> Terminale</button>
     </div>
     <div class="pane">
-      {#if dev.tab === "file"}
-        {#if studio.current}
-          {#if studio.current.binary}
+      {#if ws.dev.tab === "file"}
+        {#if ws.current}
+          {#if ws.current.binary}
             <p class="hint">File binario: non si può modificare qui.</p>
           {:else}
-            {#key studio.current.path}
-              <CodeEditor path={studio.current.path} value={studio.current.content} onchange={(v) => studio.current && (studio.current.content = v)} onsave={() => studio.save()} />
+            {#key ws.current.path}
+              <CodeEditor path={ws.current.path} value={ws.current.content} onchange={(v) => ws.current && (ws.current.content = v)} onsave={() => ws.save()} />
             {/key}
           {/if}
         {:else}
@@ -155,50 +147,48 @@
             <p>Apri un file dall'esplora risorse, oppure chiedi all'orchestratore cosa fare. I file modificati da Claude compaiono in «Modifiche», pronti per il commit.</p>
           </div>
         {/if}
-      {:else if dev.tab === "diff"}
+      {:else if ws.dev.tab === "diff"}
         <DiffViewer />
       {:else}
-        {#if dev.urls.length}
+        {#if ws.dev.urls.length}
           <div class="urlbar">
-            <select class="input" bind:value={dev.previewUrl}>{#each dev.urls as u (u)}<option value={u}>{u}</option>{/each}</select>
-            <button class="icon-btn" title="Ricarica" aria-label="Ricarica" onclick={() => frame && (frame.src = dev.previewUrl ?? "")}><Icon name="refresh" size={15} /></button>
+            <select class="input" bind:value={ws.dev.previewUrl}>{#each ws.dev.urls as u (u)}<option value={u}>{u}</option>{/each}</select>
+            <button class="icon-btn" title="Ricarica" aria-label="Ricarica" onclick={() => frame && (frame.src = ws.dev.previewUrl ?? "")}><Icon name="refresh" size={15} /></button>
           </div>
-          {#if dev.previewUrl}<iframe bind:this={frame} src={dev.previewUrl} title="Anteprima"></iframe>{/if}
+          {#if ws.dev.previewUrl}<iframe bind:this={frame} src={ws.dev.previewUrl} title="Anteprima"></iframe>{/if}
         {:else}
           <p class="hint">Nessun server acceso. Chiedi all'orchestratore di avviare il progetto: l'indirizzo locale comparirà qui.</p>
         {/if}
       {/if}
     </div>
-    {#if dev.processes.length || terms.length}
+    {#if ws.dev.processes.length || terms.length}
       <div class="bottom" class:open={bottomOpen && (termSel != null || proc)} class:isterm={termSel != null}>
         <div class="btabs">
           <button class="btoggle" onclick={() => (bottomOpen = !bottomOpen)} aria-label="Mostra o nascondi"><Icon name={bottomOpen ? "down" : "chevron"} size={12} /></button>
-          {#each dev.processes as p (p.id)}
-            <button class="bt" class:on={proc?.id === p.id} onclick={() => { dev.bottom = p.id; bottomOpen = true; }}>
+          {#each ws.dev.processes as p (p.id)}
+            <button class="bt" class:on={proc?.id === p.id} onclick={() => { ws.dev.bottom = p.id; bottomOpen = true; }}>
               <span class="led" class:run={p.running} class:bad={!p.running && p.exitCode !== 0}></span>{p.name}
             </button>
           {/each}
           {#each terms as t (t.id)}
             <span class="bt tt" class:on={termSel === t.id}>
-              <button class="ttn" onclick={() => { dev.bottom = `term:${t.id}`; bottomOpen = true; }}><Icon name="terminal" size={11} />{t.name}{#if t.ended}<em> · chiuso</em>{/if}</button>
+              <button class="ttn" onclick={() => { ws.dev.bottom = `term:${t.id}`; bottomOpen = true; }}><Icon name="terminal" size={11} />{t.name}{#if t.ended}<em> · chiuso</em>{/if}</button>
               <button class="ttx" onclick={() => chiudiTerminale(t.id)} aria-label="Chiudi {t.name}" title="Chiudi (ferma quello che ci gira)"><Icon name="x" size={10} /></button>
             </span>
           {/each}
           <button class="btoggle" onclick={nuovoTerminale} title="Nuovo terminale (⌃`)" aria-label="Nuovo terminale"><Icon name="plus" size={13} /></button>
         </div>
         {#if bottomOpen && proc}<pre class="log">{proc.log || "(nessun output)"}</pre>{/if}
-        {#if studio.project}
-          {#each terms as t (t.id)}
-            <div class="tpane" hidden={!bottomOpen || termSel !== t.id}>
-              <Terminal project={studio.project.path} active={bottomOpen && termSel === t.id} onexit={() => (t.ended = true)} />
-            </div>
-          {/each}
-        {/if}
+        {#each terms as t (t.id)}
+          <div class="tpane" hidden={!bottomOpen || termSel !== t.id}>
+            <Terminal project={ws.path} active={bottomOpen && termSel === t.id} onexit={() => (t.ended = true)} />
+          </div>
+        {/each}
       </div>
     {/if}
   </section>
 
-  <Orchestrator {prompt} />
+  <Orchestrator />
 </div>
 
 <style>

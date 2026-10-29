@@ -190,9 +190,8 @@ fn scheda(nome: &str, gruppo: &str, radice: &str, cartella: &Path) -> Value {
 }
 
 /// Le cartelle con i progetti: Scrivania/Sviluppo e Scrivania/Personale (più quelle scelte nelle impostazioni).
-fn radici(app: &App) -> Vec<(String, PathBuf)> {
-    let Some(h) = crate::shell_env::home() else { return vec![] };
-    let mut v: Vec<(String, PathBuf)> = vec![("Sviluppo".into(), h.join("Desktop/Sviluppo")), ("Personale".into(), h.join("Desktop/Personale"))];
+pub(crate) fn radici(app: &App) -> Vec<(String, PathBuf)> {
+    let mut v = radici_base();
     for extra in app.store.settings().studio_roots {
         let p = crate::tools::percorsi::espandi(&extra);
         let nome = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -203,36 +202,139 @@ fn radici(app: &App) -> Vec<(String, PathBuf)> {
     v.into_iter().filter(|(_, p)| p.is_dir()).collect()
 }
 
-#[tauri::command]
-pub async fn studio_projects(app: State<'_, App>) -> Result<Vec<Value>> {
-    let radici = radici(&app);
-    tokio::task::spawn_blocking(move || {
-        // Ogni cartella di primo livello è un progetto; se il repository sta un livello sotto si usa quello;
-        // se dentro ci sono più progetti diventa un gruppo
-        let mut lavori: Vec<(String, String, String, PathBuf)> = vec![];
-        for (radice, base) in &radici {
-            let Ok(rd) = std::fs::read_dir(base) else { continue };
-            let mut voci: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.is_dir() && !p.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.'))).collect();
-            voci.sort();
-            for p in voci {
-                let nome = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                if e_progetto(&p) {
-                    lavori.push((nome, String::new(), radice.clone(), p));
-                    continue;
-                }
-                let sotto = sotto_progetti(&p);
-                match sotto.len() {
-                    0 => {}
-                    1 => lavori.push((nome, String::new(), radice.clone(), sotto[0].clone())),
-                    _ => {
-                        for q in sotto {
-                            let n = q.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                            lavori.push((n, nome.clone(), radice.clone(), q));
-                        }
+/// Tutti i progetti nelle radici: (nome, gruppo, radice, cartella). Ogni cartella di primo livello è un
+/// progetto; se il repository sta un livello sotto si usa quello; se dentro ci sono più progetti diventa un gruppo.
+pub fn elenca(radici: &[(String, PathBuf)]) -> Vec<(String, String, String, PathBuf)> {
+    let mut lavori: Vec<(String, String, String, PathBuf)> = vec![];
+    for (radice, base) in radici {
+        let Ok(rd) = std::fs::read_dir(base) else { continue };
+        let mut voci: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.is_dir() && !p.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.'))).collect();
+        voci.sort();
+        for p in voci {
+            let nome = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            if e_progetto(&p) {
+                lavori.push((nome, String::new(), radice.clone(), p));
+                continue;
+            }
+            let sotto = sotto_progetti(&p);
+            match sotto.len() {
+                0 => {}
+                1 => lavori.push((nome, String::new(), radice.clone(), sotto[0].clone())),
+                _ => {
+                    for q in sotto {
+                        let n = q.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                        lavori.push((n, nome.clone(), radice.clone(), q));
                     }
                 }
             }
         }
+    }
+    lavori
+}
+
+/// Il nome con cui un progetto compare nello Studio e in memoria: la cartella, oppure «gruppo cartella»
+/// quando sta dentro una cartella con più progetti (come fa `elenca`).
+pub fn titolo_progetto(radici: &[(String, PathBuf)], p: &Path) -> String {
+    let nome = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let Some(madre) = p.parent() else { return nome };
+    if radici.iter().any(|(_, r)| r == madre) {
+        return nome;
+    }
+    let nome_madre = madre.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    if madre.parent().is_some_and(|n| radici.iter().any(|(_, r)| r == n)) {
+        return if sotto_progetti(madre).len() <= 1 { nome_madre } else { format!("{nome_madre} {nome}") };
+    }
+    nome
+}
+
+/// Le radici predefinite (Scrivania/Sviluppo e Scrivania/Personale), senza le impostazioni.
+pub fn radici_base() -> Vec<(String, PathBuf)> {
+    let Some(h) = crate::shell_env::home() else { return vec![] };
+    vec![("Sviluppo".into(), h.join("Desktop/Sviluppo")), ("Personale".into(), h.join("Desktop/Personale"))].into_iter().filter(|(_, p)| p.is_dir()).collect()
+}
+
+/// Prima stesura di «Com'è fatto» da ciò che lo Studio legge da solo: Claude la riscrive al primo lavoro.
+pub fn descrizione_automatica(p: &Path) -> String {
+    let mut out = String::from("_Bozza automatica di Oltremare (tecnologie, cartelle e comandi rilevati): Claude la riscrive al primo lavoro nello Studio._\n\n");
+    let st = stack(p);
+    if !st.is_empty() {
+        out.push_str(&format!("- **Tecnologie:** {}\n", st.join(", ")));
+    }
+    let (ramo, _) = git_info(p);
+    if !ramo.is_empty() {
+        out.push_str(&format!("- **Git:** ramo `{ramo}`\n"));
+    }
+    if let Ok(t) = std::fs::read_to_string(p.join("package.json")) {
+        let pkg: Value = serde_json::from_str(&t).unwrap_or(Value::Null);
+        if let Some(d) = pkg["description"].as_str().filter(|d| !d.trim().is_empty()) {
+            out.push_str(&format!("- **Descrizione (package.json):** {}\n", d.trim()));
+        }
+    }
+    let mut cartelle: Vec<String> = std::fs::read_dir(p)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| !n.starts_with('.') && !["node_modules", "target", "dist", "build", "__pycache__", ".venv", "venv", "coverage", "Pods", "bin", "obj"].contains(&n.as_str()))
+        .collect();
+    cartelle.sort();
+    if !cartelle.is_empty() {
+        out.push_str(&format!("- **Cartelle:** {}\n", cartelle.iter().take(18).map(|c| format!("`{c}/`")).collect::<Vec<_>>().join(", ")));
+    }
+    let cmd = comandi(p);
+    if !cmd.is_empty() {
+        out.push_str("- **Comandi:**\n");
+        for c in cmd.iter().take(8) {
+            let rel = c["rel"].as_str().unwrap_or("");
+            out.push_str(&format!("  - {}: `{}`{}\n", c["label"].as_str().unwrap_or(""), c["command"].as_str().unwrap_or(""), if rel.is_empty() { String::new() } else { format!(" (in `{rel}/`)") }));
+        }
+    }
+    for f in ["CLAUDE.md", "AGENTS.md"] {
+        if p.join(f).exists() {
+            out.push_str(&format!("- Istruzioni per gli agenti in `{f}`.\n"));
+        }
+    }
+    if let Ok(r) = std::fs::read_to_string(p.join("README.md")) {
+        let righe: Vec<&str> = r.lines().filter(|l| !l.trim().is_empty() && !l.starts_with('<') && !l.starts_with("![") && !l.starts_with("[!")).take(12).collect();
+        let estratto: String = righe.join("\n").chars().take(900).collect();
+        if !estratto.trim().is_empty() {
+            out.push_str(&format!("\n**Dal README:**\n\n> {}\n", estratto.replace('\n', "\n> ")));
+        }
+    }
+    out
+}
+
+/// Crea (o completa) la nota in memoria di ogni progetto dello Studio. Restituisce quante note ha scritto.
+pub fn semina_memoria(radici: &[(String, PathBuf)], dir: &Path) -> usize {
+    let mut n = 0;
+    for (nome, gruppo, _, cartella) in elenca(radici) {
+        let titolo = if gruppo.is_empty() { nome.clone() } else { format!("{gruppo} {nome}") };
+        let Ok(nota) = crate::memoria::nota_progetto(dir, &titolo, &cartella) else { continue };
+        let Ok(testo) = std::fs::read_to_string(&nota) else { continue };
+        if testo.contains("_Da completare") {
+            let nuovo = testo.replace("_Da completare: Claude la scrive al primo lavoro nello Studio (stack, struttura, comandi, convenzioni, punti delicati)._", &descrizione_automatica(&cartella));
+            if std::fs::write(&nota, nuovo).is_ok() {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
+/// Dalle impostazioni: le note di tutti i progetti, con la bozza automatica dove manca «Com'è fatto».
+#[tauri::command]
+pub async fn memory_seed(app: State<'_, App>) -> Result<usize> {
+    let dir = crate::memoria::cartella(&app.store.settings()).ok_or_else(|| AppError::msg("La memoria non è attiva"))?;
+    let radici = radici(&app);
+    tokio::task::spawn_blocking(move || semina_memoria(&radici, &dir)).await.map_err(|e| AppError::msg(e.to_string()))
+}
+
+#[tauri::command]
+pub async fn studio_projects(app: State<'_, App>) -> Result<Vec<Value>> {
+    let radici = radici(&app);
+    tokio::task::spawn_blocking(move || {
+        let lavori = elenca(&radici);
         // In parallelo: git status su decine di progetti
         let schede: Vec<Value> = std::thread::scope(|sc| {
             let h: Vec<_> = lavori.iter().map(|(n, g, r, p)| sc.spawn(move || scheda(n, g, r, p))).collect();
@@ -416,7 +518,139 @@ async fn ambiente_claudex(profilo: &str) -> std::result::Result<Vec<(String, Str
     Ok(env)
 }
 
-// ---------- Lavoro: piano, approvazione, modifiche ----------
+// ---------- Lavoro: piano, approvazione, modifiche, revisione ----------
+
+/// Come lavora chi sviluppa nello Studio: lo standard di uno sviluppatore senior.
+const SENIOR: &str = "Lavori come uno sviluppatore senior, e il tuo lavoro sarà rivisto da un CTO esigente.\n\
+- Prima capisci: leggi il codice coinvolto, le convenzioni del progetto (struttura, stile, librerie già in uso, test esistenti) e la memoria del progetto. Non introdurre librerie o pattern nuovi se ce n'è già uno in uso per lo stesso scopo.\n\
+- Modifiche minime e mirate: risolvi la richiesta senza funzionalità in più, senza refactoring non richiesti e senza riformattare file interi; il diff deve leggersi in pochi minuti.\n\
+- Qualità: gestisci errori e casi limite, niente valori fissi dove esiste una configurazione, attenzione a sicurezza (input esterni, segreti, permessi, iniezioni) e prestazioni (query, cicli, memoria, chiamate di rete).\n\
+- Verifica sempre: esegui build, lint e test disponibili; per comportamenti nuovi o corretti aggiungi o aggiorna i test. Se qualcosa fallisce, correggilo prima di dichiarare concluso; non dichiarare verificato ciò che non hai eseguito.\n\
+- Se la richiesta è ambigua, scegli l'interpretazione più ragionevole e dichiarala; non inventare requisiti e non fare domande.\n\
+- Riepilogo finale, breve: cosa è cambiato (file), come l'hai verificato (comandi e risultato), rischi residui, cosa resta da fare.";
+
+/// Come rivede il CTO: giudizio concreto e un verdetto strutturato che Oltremare sa leggere.
+const CTO: &str = "Sei il CTO e rivedi le modifiche appena fatte da uno sviluppatore senior. Non modificare nulla: solo leggere, eseguire i test e giudicare.\n\
+Le modifiche sono quelle non ancora committate: guardale con git status e git diff (leggi per intero i file nuovi). Se i test o il controllo dei tipi sono rapidi, eseguili.\n\
+Valuta: correttezza (bug, casi limite, regressioni), coerenza con il progetto (convenzioni, architettura, duplicazioni, librerie), sicurezza, prestazioni, test (ci sono? coprono il cambiamento? passano?), leggibilità e manutenibilità, aderenza alla richiesta (né meno né più).\n\
+Sii esigente ma concreto: segnala solo problemi reali e verificati, ognuno con file, riga e la correzione precisa. Niente osservazioni di stile se il progetto non ha una regola in merito.\n\
+Chiudi con un giudizio di poche righe e poi, come ultima cosa, un blocco ```json con esattamente questa forma:\n\
+{\"esito\": \"approvato\" | \"da correggere\", \"voto\": 1-10, \"sintesi\": \"una frase\", \"problemi\": [{\"gravita\": \"bloccante\" | \"importante\" | \"minore\", \"file\": \"percorso\", \"riga\": 0, \"problema\": \"...\", \"correzione\": \"...\"}]}\n\
+«da correggere» solo se c'è almeno un problema bloccante o importante; i minori si elencano ma non bloccano.";
+
+/// Memoria del progetto per Claude: la nota in Obsidian (com'è fatto, decisioni, ultime voci del diario) e,
+/// se può scrivere, la cartella delle note e le istruzioni per aggiornarla alla fine.
+fn memoria_progetto(st: &App, p: &Path, scrive: bool) -> (Vec<PathBuf>, Option<String>) {
+    let mut cartelle = vec![];
+    let testo = crate::memoria::cartella(&st.store.settings()).and_then(|dir| {
+        let nome = titolo_progetto(&radici(st), p);
+        let nota = crate::memoria::nota_progetto(&dir, &nome, p).ok()?;
+        if scrive {
+            cartelle.push(nota.parent()?.to_path_buf());
+        }
+        Some(format!(
+            "\n\nMemoria del progetto (nota di Obsidian {}):\n<memoria_progetto>\n{}\n</memoria_progetto>\n\
+Usala come punto di partenza invece di riesplorare tutto. {}",
+            nota.display(),
+            crate::memoria::contesto_progetto(&nota),
+            if scrive {
+                "Alla fine, se hai imparato qualcosa di stabile, aggiorna quella nota con Edit: la sezione «Com'è fatto» (stack, struttura delle cartelle, comandi per avviare, testare e compilare, convenzioni, punti delicati: concisa, da riscrivere se è superata) e «Decisioni» (scelte importanti con il perché, una riga ciascuna). Non toccare «Diario dei lavori»: lo aggiorna Oltremare."
+            } else {
+                "Non modificarla."
+            }
+        ))
+    });
+    (cartelle, testo)
+}
+
+/// Revisione del CTO sulle modifiche non committate: sessione a sé, sola lettura, verdetto in JSON alla fine.
+#[tauri::command]
+pub async fn studio_review(handle: AppHandle, project: String, text: String, model: String, profile: Option<String>) -> Result<Value> {
+    let st = handle.state::<App>();
+    let p = cartella(&st, &project)?;
+    let ambiente = match profile.as_deref().filter(|x| !x.is_empty()) {
+        Some(pr) => ambiente_claudex(pr).await.map_err(AppError::msg)?,
+        None => vec![],
+    };
+    let (_, memoria) = memoria_progetto(&st, &p, false);
+    let o = Opzioni {
+        modello: match model.as_str() {
+            "auto" | "" => "opus".into(),
+            "fable" => "claude-fable-5-1".into(),
+            _ => model,
+        },
+        modo: "default".into(),
+        solo_lettura: true,
+        ambiente,
+        istruzioni: format!("{CTO}{}", memoria.unwrap_or_default()),
+        cartelle: vec![],
+    };
+    let richiesta = format!("Rivedi le modifiche fatte per questa richiesta dell'utente:\n<richiesta>\n{}\n</richiesta>", text.trim());
+    let sid = sviluppo::avvia_headless_con(&handle, &p, &richiesta, None, o).await.map_err(AppError::msg)?;
+    Ok(json!({ "session": sid }))
+}
+
+/// Il verdetto del CTO: il blocco JSON nell'ultima risposta della sessione di revisione.
+#[tauri::command]
+pub fn studio_review_result(app: State<'_, App>, project: String, session: String) -> Result<Value> {
+    let p = cartella(&app, &project)?;
+    let file = sviluppo::sessioni(&p).into_iter().map(|(f, _)| f).find(|f| f.file_stem().is_some_and(|s| s.to_string_lossy() == session)).ok_or_else(|| AppError::msg("Revisione non trovata"))?;
+    let t = std::fs::read_to_string(&file)?;
+    let mut ultima = String::new();
+    for riga in t.lines() {
+        let Ok(v) = serde_json::from_str::<Value>(riga) else { continue };
+        if v["type"] != "assistant" {
+            continue;
+        }
+        for b in v["message"]["content"].as_array().into_iter().flatten() {
+            if let (Some("text"), Some(x)) = (b["type"].as_str(), b["text"].as_str()) {
+                if !x.trim().is_empty() {
+                    ultima = x.to_string();
+                }
+            }
+        }
+    }
+    Ok(leggi_verdetto(&ultima))
+}
+
+/// Estrae il verdetto dal testo del CTO; se manca o è rotto, resta il giudizio in prosa.
+fn leggi_verdetto(testo: &str) -> Value {
+    let blocco = testo.rfind("```json").and_then(|i| {
+        let dopo = &testo[i + 7..];
+        dopo.find("```").map(|j| dopo[..j].trim().to_string())
+    });
+    let prosa: String = testo.split("```json").next().unwrap_or(testo).trim().chars().take(4000).collect();
+    match blocco.and_then(|b| serde_json::from_str::<Value>(&b).ok()) {
+        Some(mut v) if v.is_object() => {
+            let esito = match v["esito"].as_str() {
+                Some("approvato") => "approvato",
+                _ => "da correggere",
+            };
+            let problemi: Vec<Value> = v["problemi"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|x| {
+                    json!({
+                        "gravita": match x["gravita"].as_str() { Some("bloccante") => "bloccante", Some("importante") => "importante", _ => "minore" },
+                        "file": x["file"].as_str().unwrap_or(""),
+                        "riga": x["riga"].as_u64().unwrap_or(0),
+                        "problema": x["problema"].as_str().unwrap_or(""),
+                        "correzione": x["correzione"].as_str().unwrap_or(""),
+                    })
+                })
+                .collect();
+            let bloccanti = problemi.iter().any(|x| x["gravita"] != "minore");
+            v["esito"] = json!(if esito == "approvato" && !bloccanti { "approvato" } else if !bloccanti { "approvato" } else { "da correggere" });
+            v["problemi"] = json!(problemi);
+            v["voto"] = json!(v["voto"].as_f64().map(|x| x.clamp(1.0, 10.0).round() as u64));
+            v["sintesi"] = json!(v["sintesi"].as_str().unwrap_or("").to_string());
+            v["testo"] = json!(prosa);
+            v
+        }
+        _ => json!({ "esito": "sconosciuto", "sintesi": "", "problemi": [], "voto": null, "testo": prosa }),
+    }
+}
 
 pub fn cartella_pub(app: &App, p: &str) -> Result<PathBuf> {
     cartella(app, p)
@@ -449,26 +683,10 @@ pub async fn studio_run(handle: AppHandle, project: String, text: String, model:
             l.server, l.project, l.name, l.server
         )
     });
-    // Memoria del progetto: Claude sa già com'è fatto e cosa si è deciso, e alla fine aggiorna la nota
-    let mut cartelle = vec![];
-    let memoria = crate::memoria::cartella(&st.store.settings()).and_then(|dir| {
-        let nome = p.file_name()?.to_string_lossy().into_owned();
-        let nota = crate::memoria::nota_progetto(&dir, &nome, &p).ok()?;
-        cartelle.push(nota.parent()?.to_path_buf());
-        Some(format!(
-            "\n\nMemoria del progetto (nota di Obsidian {}):\n<memoria_progetto>\n{}\n</memoria_progetto>\n\
-Usala come punto di partenza invece di riesplorare tutto. {}",
-            nota.display(),
-            crate::memoria::contesto_progetto(&nota),
-            if plan {
-                "In modalità piano non modificarla."
-            } else {
-                "Alla fine, se hai imparato qualcosa di stabile, aggiorna quella nota con Edit: la sezione «Com'è fatto» (stack, struttura delle cartelle, comandi per avviare, testare e compilare, convenzioni, punti delicati: concisa, da riscrivere se è superata) e «Decisioni» (scelte importanti con il perché, una riga ciascuna). Non toccare «Diario dei lavori»: lo aggiorna Oltremare."
-            }
-        ))
-    });
+    let (cartelle, memoria) = memoria_progetto(&st, &p, !plan);
     let o = Opzioni {
         cartelle,
+        solo_lettura: false,
         modello: match model.as_str() {
             "auto" => String::new(),
             // Fable non ha un alias in Claude Code: si usa il nome del modello
@@ -478,7 +696,7 @@ Usala come punto di partenza invece di riesplorare tutto. {}",
         modo: if plan { "plan".into() } else { "acceptEdits".into() },
         ambiente,
         istruzioni: format!(
-            "{}{}{}",
+            "{SENIOR}\n{}{}{}",
             if plan { "Ora sei in modalità piano: esplora e proponi un piano concreto (file da toccare, passi, come verificare), senza modificare nulla. L'utente lo approverà prima dell'esecuzione. Scrivi il piano completo nel tuo ultimo messaggio: Oltremare lo mostra con il pulsante «Approva ed esegui» (non cercare né usare ExitPlanMode e non chiedere approvazione a parole)." } else { "" },
             collegamento.unwrap_or_default(),
             memoria.unwrap_or_default()
@@ -785,5 +1003,36 @@ pub async fn studio_stop(id: String) -> Result<()> {
         Err(AppError::msg(e.testo))
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod prove_claudex {
+    #[test]
+    #[ignore = "scrive le note di tutti i progetti nella memoria dell'utente"]
+    fn semina_le_note_dei_progetti() {
+        let dir = std::path::PathBuf::from(std::env::var("OLTREMARE_MEMORIA").expect("OLTREMARE_MEMORIA"));
+        let radici = super::radici_base();
+        let n = super::semina_memoria(&radici, &dir);
+        eprintln!("progetti: {}, note scritte: {n}", super::elenca(&radici).len());
+    }
+
+    #[test]
+    fn il_verdetto_si_legge_anche_se_impreciso() {
+        let v = super::leggi_verdetto("Bene nel complesso.\n```json\n{\"esito\": \"approvato\", \"voto\": 8, \"sintesi\": \"ok\", \"problemi\": [{\"gravita\": \"minore\", \"file\": \"a.ts\", \"riga\": 3, \"problema\": \"nome\", \"correzione\": \"rinomina\"}]}\n```");
+        assert_eq!(v["esito"], "approvato");
+        assert_eq!(v["voto"], 8);
+        // «approvato» con un problema importante diventa «da correggere»
+        let v = super::leggi_verdetto("```json\n{\"esito\": \"approvato\", \"problemi\": [{\"gravita\": \"importante\", \"problema\": \"bug\"}]}\n```");
+        assert_eq!(v["esito"], "da correggere");
+        assert_eq!(super::leggi_verdetto("solo prosa")["esito"], "sconosciuto");
+    }
+
+    #[test]
+    #[ignore = "dipende da Claudex installato sul computer"]
+    fn legge_i_profili() {
+        let p = super::claudex_profili();
+        eprintln!("bin: {:?}, profili: {p:?}", super::claudex_bin());
+        assert!(!p.is_empty());
     }
 }

@@ -2,12 +2,14 @@
   // Differenze leggibili: una scheda per file con +/−, numeri di riga, parole cambiate in risalto, vista unica o affiancata.
   import Icon from "../Icon.svelte";
   import FileIcon from "../dev/FileIcon.svelte";
-  import { git } from "../state/git.svelte";
-  import { studio } from "../state/studio.svelte";
   import { parseDiff, splitRows, type DFile, type DLine } from "./diff";
+  import { getContext } from "svelte";
+  import type { Workspace as WS } from "../state/workspace.svelte";
+
+  const ws = getContext<WS>("ws");
 
   const MAX = 1500;
-  const files = $derived(parseDiff(git.diff));
+  const files = $derived(parseDiff(ws.git.diff));
   const totals = $derived(files.reduce((t, f) => ({ add: t.add + f.add, del: t.del + f.del }), { add: 0, del: 0 }));
   let closed = $state<Record<string, boolean>>({});
   let full = $state<Record<string, boolean>>({});
@@ -17,7 +19,7 @@
   const STATUS: Record<DFile["status"], string> = { modified: "modificato", added: "nuovo", deleted: "eliminato", renamed: "rinominato" };
 
   function abs(rel: string) {
-    return `${studio.project?.path ?? ""}/${rel}`;
+    return `${ws.project?.path ?? ""}/${rel}`;
   }
   function name(p: string) {
     return p.split("/").pop() ?? p;
@@ -36,7 +38,7 @@
       return;
     }
     armed = null;
-    git.discard([abs(f.path)]);
+    ws.git.discard([abs(f.path)]);
   }
   function toggleAll() {
     const anyOpen = files.some((f) => !closed[f.path]);
@@ -51,12 +53,12 @@
 <div class="dv">
   <header class="bar">
     <div class="seg" role="group" aria-label="Quali modifiche">
-      <button class:on={!git.diffStaged} onclick={() => git.showDiff(git.diffFile, false)}>Da preparare <b>{git.changed.length}</b></button>
-      <button class:on={git.diffStaged} onclick={() => git.showDiff(git.diffFile, true)}>Pronte <b>{git.staged.length}</b></button>
+      <button class:on={!ws.git.diffStaged} onclick={() => ws.git.showDiff(ws.git.diffFile, false)}>Da preparare <b>{ws.git.changed.length}</b></button>
+      <button class:on={ws.git.diffStaged} onclick={() => ws.git.showDiff(ws.git.diffFile, true)}>Pronte <b>{ws.git.staged.length}</b></button>
     </div>
-    {#if git.diffFile}
-      <button class="chip" onclick={() => git.showDiff(null, git.diffStaged)} title="Mostra tutti i file">
-        <FileIcon name={name(git.diffFile)} /> {name(git.diffFile)} <Icon name="x" size={10} />
+    {#if ws.git.diffFile}
+      <button class="chip" onclick={() => ws.git.showDiff(null, ws.git.diffStaged)} title="Mostra tutti i file">
+        <FileIcon name={name(ws.git.diffFile)} /> {name(ws.git.diffFile)} <Icon name="x" size={10} />
       </button>
     {/if}
     {#if files.length}
@@ -65,15 +67,15 @@
     <span class="grow"></span>
     {#if files.length > 1}<button class="icon-btn" onclick={toggleAll} title="Apri o chiudi tutti" aria-label="Apri o chiudi tutti"><Icon name="layers" size={14} /></button>{/if}
     <div class="seg" role="group" aria-label="Vista">
-      <button class:on={git.view === "unified"} onclick={() => git.setView("unified")} title="Vista unica" aria-label="Vista unica"><Icon name="rows" size={14} /></button>
-      <button class:on={git.view === "split"} onclick={() => git.setView("split")} title="Vista affiancata" aria-label="Vista affiancata"><Icon name="split" size={14} /></button>
+      <button class:on={ws.git.view === "unified"} onclick={() => ws.git.setView("unified")} title="Vista unica" aria-label="Vista unica"><Icon name="rows" size={14} /></button>
+      <button class:on={ws.git.view === "split"} onclick={() => ws.git.setView("split")} title="Vista affiancata" aria-label="Vista affiancata"><Icon name="split" size={14} /></button>
     </div>
   </header>
 
   {#if !files.length}
     <div class="empty">
       <span class="ok"><Icon name="check" size={22} /></span>
-      <p>{git.diffStaged ? "Niente di pronto per il commit. Prepara i file dalla colonna a sinistra." : "Nessuna modifica da preparare: il progetto è uguale all'ultimo commit."}</p>
+      <p>{ws.git.diffStaged ? "Niente di pronto per il commit. Prepara i file dalla colonna a sinistra." : "Nessuna modifica da preparare: il progetto è uguale all'ultimo commit."}</p>
     </div>
   {:else}
     <div class="files">
@@ -95,14 +97,14 @@
               <span class="blocks">{#each Array(5) as _, i (i)}{@const tot = f.add + f.del || 1}<i class:a={i < Math.round((f.add / tot) * 5)} class:d={i >= Math.round((f.add / tot) * 5) && f.add + f.del > 0}></i>{/each}</span>
             </span>
             <div class="acts">
-              {#if f.status !== "deleted"}<button class="icon-btn" onclick={() => studio.openFile(abs(f.path))} title="Apri nell'editor" aria-label="Apri nell'editor"><Icon name="draft" size={13} /></button>{/if}
-              {#if git.diffStaged}
-                <button class="icon-btn" onclick={() => git.unstage([abs(f.path)])} title="Togli dai pronti" aria-label="Togli dai pronti"><Icon name="minus" size={14} /></button>
+              {#if f.status !== "deleted"}<button class="icon-btn" onclick={() => ws.openFile(abs(f.path))} title="Apri nell'editor" aria-label="Apri nell'editor"><Icon name="draft" size={13} /></button>{/if}
+              {#if ws.git.diffStaged}
+                <button class="icon-btn" onclick={() => ws.git.unstage([abs(f.path)])} title="Togli dai pronti" aria-label="Togli dai pronti"><Icon name="minus" size={14} /></button>
               {:else}
                 <button class="icon-btn danger" class:armed={armed === f.path} onclick={() => discard(f)} title={armed === f.path ? "Clicca ancora per annullare le modifiche" : "Annulla le modifiche"} aria-label="Annulla le modifiche">
                   <Icon name="undo" size={13} />{#if armed === f.path}<span>Sicuro?</span>{/if}
                 </button>
-                <button class="icon-btn" onclick={() => git.stage([abs(f.path)])} title="Prepara per il commit" aria-label="Prepara per il commit"><Icon name="plus" size={14} /></button>
+                <button class="icon-btn" onclick={() => ws.git.stage([abs(f.path)])} title="Prepara per il commit" aria-label="Prepara per il commit"><Icon name="plus" size={14} /></button>
               {/if}
             </div>
           </div>
@@ -113,7 +115,7 @@
               <p class="note">{f.status === "renamed" ? "Solo rinominato, contenuto uguale." : "Nessuna riga cambiata (permessi o file vuoto)."}</p>
             {:else if many}
               <p class="note">Differenze lunghe ({lineCount(f)} righe). <button class="link" onclick={() => (full[f.path] = true)}>Mostrale comunque</button></p>
-            {:else if git.view === "unified"}
+            {:else if ws.git.view === "unified"}
               <div class="scroll">
                 <table class="code uni">
                   <tbody>

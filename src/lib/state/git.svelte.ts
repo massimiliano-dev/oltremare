@@ -1,9 +1,11 @@
 // Git dello Studio: stato (pronte / modificate), azioni, rami, sincronizzazione, differenze.
 import { api, errorText, type GitState } from "../api";
-import { dev } from "./dev.svelte";
+import { dev, type DevState } from "./dev.svelte";
 import { ui } from "./ui.svelte";
 
-class GitStore {
+export class GitStore {
+  constructor(private dev: DevState) {}
+
   state = $state<GitState | null>(null);
   project = $state<string | null>(null);
   message = $state("");
@@ -47,7 +49,7 @@ class GitStore {
     if (!this.project) return;
     this.diffFile = file;
     this.diffStaged = staged;
-    dev.tab = "diff";
+    this.dev.tab = "diff";
     let d = await api.gitDiff(this.project, staged, file ?? undefined).catch((e) => errorText(e));
     // `git diff` non include i file nuovi non tracciati: si aggiungono uno per uno
     if (!file && !staged) {
@@ -70,8 +72,8 @@ class GitStore {
     } finally {
       this.busy = null;
       await this.refresh();
-      dev.refreshGit();
-      if (dev.tab === "diff") this.showDiff(this.diffFile, this.diffStaged);
+      this.dev.refreshGit();
+      if (this.dev.tab === "diff") this.showDiff(this.diffFile, this.diffStaged);
     }
   }
 
@@ -122,4 +124,4 @@ class GitStore {
   }
 }
 
-export const git = new GitStore();
+export const git = new GitStore(dev);

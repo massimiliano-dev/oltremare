@@ -8,8 +8,6 @@
   import RunBar from "./lib/studio/RunBar.svelte";
   import UsagePanel from "./lib/settings/UsagePanel.svelte";
   import { studio } from "./lib/state/studio.svelte";
-  import { dev } from "./lib/state/dev.svelte";
-  import { git } from "./lib/state/git.svelte";
   import { settings } from "./lib/state/settings.svelte";
   import { ui } from "./lib/state/ui.svelte";
   import { on } from "./lib/events";
@@ -17,58 +15,82 @@
 
   const q = new URLSearchParams(location.search);
   let prompt = $state(q.get("prompt") ?? "");
-  let switcher = $state(false);
   let usage = $state(false);
 
   onMount(async () => {
     document.title = "Oltremare Studio";
+    // In anteprima (fuori da Tauri) lo stato è raggiungibile dalla console per provare le schermate
+    if (import.meta.env.DEV) (window as unknown as { studio: typeof studio }).studio = studio;
     await settings.load().catch(() => {});
-    await Promise.all([studio.loadProjects(), studio.loadClaudex(), dev.init(), agents.load().catch(() => {})]);
+    await Promise.all([studio.loadProjects(), studio.loadClaudex(), agents.load().catch(() => {})]);
+    // Le schede dell'ultima volta, poi il progetto chiesto da chi ha aperto la finestra
+    studio.restoreTabs();
     const p = q.get("project");
-    if (p) studio.open(p);
+    if (p) studio.open(p, { prompt });
     on("studio-open", (e) => {
-      if (e.project && e.project !== studio.project?.path) studio.open(e.project);
-      if (e.prompt) prompt = e.prompt;
+      if (e.project) studio.open(e.project, { prompt: e.prompt ?? undefined });
+      else if (e.prompt && studio.tab) studio.tab.draft = e.prompt;
     });
   });
 
+  // I profili di Claudex possono cambiare mentre lo Studio è aperto: si rileggono quando la finestra torna davanti
+  function focus() {
+    studio.loadClaudex();
+  }
+
   function key(e: KeyboardEvent) {
     const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key.toLowerCase() === "p") {
+    if (!mod) return;
+    if (e.key.toLowerCase() === "p" && !e.shiftKey) {
       e.preventDefault();
-      switcher = !switcher;
+      studio.picker();
+    } else if (e.shiftKey && (e.key === "]" || e.key === "}")) {
+      e.preventDefault();
+      studio.cycle(1);
+    } else if (e.shiftKey && (e.key === "[" || e.key === "{")) {
+      e.preventDefault();
+      studio.cycle(-1);
+    } else if (/^[1-9]$/.test(e.key) && !e.shiftKey && !e.altKey) {
+      const ws = studio.tabs[Number(e.key) - 1];
+      if (ws) {
+        e.preventDefault();
+        studio.show(ws);
+      }
     }
   }
 </script>
 
-<svelte:window onkeydown={key} />
+<svelte:window onkeydown={key} onfocus={focus} />
 
 <div class="studio" class:mac={ui.isMac}>
   <header class="bar" data-tauri-drag-region>
     <span class="brand" data-tauri-drag-region><span class="dot"></span><em>Oltremare</em> Studio</span>
-    {#if studio.project}
-      <button class="crumb" onclick={() => studio.close()} title="Tutti i progetti"><Icon name="left" size={13} /> Progetti</button>
-      <span class="sep">/</span>
-      <div class="proj">
-        <button class="pname" onclick={() => (switcher = !switcher)} title="Cambia progetto (⌘P)">{studio.project.name} <Icon name="down" size={11} /></button>
-        {#if switcher}
-          <div class="menu" role="menu">
-            {#each studio.projects.filter((p) => studio.recent.includes(p.path) || studio.pinned.includes(p.path)).slice(0, 10) as p (p.path)}
-              <button role="menuitem" onclick={() => { switcher = false; studio.open(p); }}>{p.name}<small>{p.group || p.root}</small></button>
-            {/each}
-            <button role="menuitem" class="all" onclick={() => { switcher = false; studio.close(); }}>Tutti i progetti…</button>
+    {#if studio.tabs.length}
+      <nav class="tabs" aria-label="Progetti aperti">
+        {#each studio.tabs as t, i (t.id)}
+          {@const on = studio.tab === t}
+          {@const lavora = t.busy}
+          <div class="ptab" class:on class:lavora style="--h:{t.project.hue}">
+            <button class="pt" onclick={() => studio.show(t)} title="{t.project.path}{i < 9 ? ` · ⌘${i + 1}` : ''}">
+              <span class="pdot"></span>
+              <span class="pn">{t.project.name}</span>
+              {#if lavora}<span class="pulse" title="Claude sta lavorando"></span>{/if}
+            </button>
+            <button class="px" onclick={() => studio.closeTab(t)} aria-label="Chiudi {t.project.name}" title="Chiudi la scheda"><Icon name="x" size={11} /></button>
           </div>
-        {/if}
-      </div>
-      {#if git.state?.repo}
-        <span class="branch" data-tauri-drag-region title={git.state.upstream ? `Remoto: ${git.state.upstream}` : "Nessun ramo remoto"}>
-          <Icon name="branch" size={12} /> {git.state.branch}
-          {#if git.state.ahead}<span class="ab">↑{git.state.ahead}</span>{/if}{#if git.state.behind}<span class="ab">↓{git.state.behind}</span>{/if}
-        </span>
-      {/if}
+        {/each}
+      </nav>
+      <button class="padd" class:on={!studio.tab} onclick={() => studio.picker()} title="Apri un altro progetto (⌘P)" aria-label="Apri un altro progetto"><Icon name="plus" size={14} /></button>
+    {/if}
+    {#if studio.tab?.git.state?.repo}
+      {@const g = studio.tab.git.state}
+      <span class="branch" data-tauri-drag-region title={g.upstream ? `Remoto: ${g.upstream}` : "Nessun ramo remoto"}>
+        <Icon name="branch" size={12} /> {g.branch}
+        {#if g.ahead}<span class="ab">↑{g.ahead}</span>{/if}{#if g.behind}<span class="ab">↓{g.behind}</span>{/if}
+      </span>
     {/if}
     <span class="sp" data-tauri-drag-region></span>
-    {#if studio.project}<RunBar />{/if}
+    {#if studio.tab}{#key studio.tab.id}<RunBar ws={studio.tab} />{/key}{/if}
     <button class="cons" class:on={usage} onclick={() => (usage = !usage)} title="Consumi di Claude, GPT e delle altre AI"><Icon name="bolt" size={13} /> Consumi</button>
   </header>
   {#if usage}
@@ -81,11 +103,10 @@
     </aside>
   {/if}
 
-  {#if studio.project}
-    {#key studio.project.path}
-      <Workspace {prompt} />
-    {/key}
-  {:else}
+  {#each studio.tabs as t (t.id)}
+    <div class="host" hidden={studio.tab !== t}><Workspace ws={t} /></div>
+  {/each}
+  {#if !studio.tab}
     <ProjectPicker />
   {/if}
   <Toasts />
@@ -131,63 +152,110 @@
     border-radius: 50%;
     background: var(--accent);
   }
-  .crumb {
+  .tabs {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
     margin-left: 10px;
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-size: var(--t-sm);
-    color: var(--ink-3);
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
-  .crumb:hover,
-  .pname:hover {
-    background: var(--paper);
-  }
-  .sep {
-    color: var(--ink-3);
-  }
-  .proj {
+  .ptab {
     position: relative;
-  }
-  .pname {
     display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-weight: 650;
+    flex: none;
+    max-width: 200px;
+    height: 30px;
+    border-radius: 9px;
+    color: var(--ink-3);
+    transition: background-color 0.15s, color 0.15s;
   }
-  .menu {
-    position: absolute;
-    top: 32px;
-    left: 0;
-    z-index: 30;
-    min-width: 280px;
-    padding: 6px;
-    display: grid;
-    border-radius: var(--r-md);
+  .ptab:hover {
     background: var(--paper);
-    box-shadow: var(--shadow-sheet);
+    color: var(--ink-2);
   }
-  .menu button {
+  .ptab.on {
+    background: var(--paper);
+    color: var(--ink);
+    box-shadow: 0 1px 2px oklch(0.3 0.05 var(--tint-h) / 0.08), inset 0 -2px 0 oklch(0.62 0.16 var(--h));
+  }
+  .pt {
     display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 7px 9px;
-    border-radius: 6px;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    height: 100%;
+    padding: 0 4px 0 10px;
     font-size: var(--t-sm);
-    text-align: left;
+    font-weight: 600;
   }
-  .menu button:hover {
-    background: var(--paper-2);
+  .pdot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 3px;
+    background: oklch(0.72 0.15 var(--h));
   }
-  .menu small {
+  .pn {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pulse {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: beat 1.1s ease-in-out infinite;
+  }
+  @keyframes beat {
+    50% {
+      transform: scale(0.55);
+      opacity: 0.45;
+    }
+  }
+  .px {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    margin: 0 5px 0 0;
+    border-radius: 6px;
+    color: var(--ink-3);
+    opacity: 0;
+    transition: opacity 0.12s, background-color 0.12s;
+  }
+  .ptab:hover .px,
+  .ptab.on .px,
+  .px:focus-visible {
+    opacity: 1;
+  }
+  .px:hover {
+    color: var(--danger);
+    background: var(--danger-wash);
+  }
+  .padd {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
     color: var(--ink-3);
   }
-  .menu .all {
+  .padd:hover,
+  .padd.on {
     color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 10%, transparent);
+  }
+  .host {
+    display: contents;
+  }
+  .host[hidden] {
+    display: none;
   }
   .branch {
     display: flex;

@@ -5,9 +5,10 @@
   import Icon from "../Icon.svelte";
   import FileIcon from "../dev/FileIcon.svelte";
   import { api, type GitFile } from "../api";
-  import { git } from "../state/git.svelte";
-  import { dev } from "../state/dev.svelte";
-  import { studio } from "../state/studio.svelte";
+  import { getContext } from "svelte";
+  import type { Workspace as WS } from "../state/workspace.svelte";
+
+  const ws = getContext<WS>("ws");
 
   let menu = $state(false);
   let branches = $state<{ name: string; current: boolean; when: string; upstream: string }[]>([]);
@@ -19,20 +20,20 @@
   let openChanged = $state(true);
   let armTimer: ReturnType<typeof setTimeout> | undefined;
 
-  const s = $derived(git.state);
-  const total = $derived(git.staged.length + git.changed.length);
+  const s = $derived(ws.git.state);
+  const total = $derived(ws.git.staged.length + ws.git.changed.length);
   const shown = $derived(branches.filter((b) => b.name.toLowerCase().includes(filter.trim().toLowerCase())));
   const newName = $derived(filter.trim().replace(/\s+/g, "-"));
   const canCreate = $derived(!!newName && !branches.some((b) => b.name === newName));
-  const canCommit = $derived(!git.busy && (amend || (!!git.message.trim() && total > 0)));
+  const canCommit = $derived(!ws.git.busy && (amend || (!!ws.git.message.trim() && total > 0)));
 
   const LABEL: Record<string, string> = { M: "Modificato", A: "Aggiunto", D: "Eliminato", R: "Rinominato", C: "Copiato", U: "In conflitto", "?": "Nuovo, non tracciato" };
 
   async function openMenu() {
     menu = !menu;
-    if (!menu || !git.project) return;
+    if (!menu || !ws.git.project) return;
     filter = "";
-    const [b, l] = await Promise.all([api.gitBranches(git.project).catch(() => ({ branches: [] })), api.gitLog(git.project).catch(() => [])]);
+    const [b, l] = await Promise.all([api.gitBranches(ws.git.project).catch(() => ({ branches: [] })), api.gitLog(ws.git.project).catch(() => [])]);
     branches = b.branches;
     log = l.slice(0, 12);
   }
@@ -49,7 +50,7 @@
   }
 
   function select(f: GitFile, staged: boolean) {
-    git.showDiff(f.path, staged);
+    ws.git.showDiff(f.path, staged);
   }
 
   function badge(st: string) {
@@ -59,7 +60,7 @@
   function keydown(e: KeyboardEvent) {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canCommit) {
       e.preventDefault();
-      git.commit({ amend });
+      ws.git.commit({ amend });
       amend = false;
     }
   }
@@ -83,7 +84,7 @@
 {#snippet row(f: GitFile, staged: boolean)}
   {@const nome = f.rel.split("/").pop() ?? f.rel}
   {@const cart = f.rel.includes("/") ? f.rel.slice(0, f.rel.lastIndexOf("/")) : ""}
-  {@const on = dev.tab === "diff" && git.diffFile === f.path && git.diffStaged === staged}
+  {@const on = ws.dev.tab === "diff" && ws.git.diffFile === f.path && ws.git.diffStaged === staged}
   <div class="f" class:on>
     <button class="fmain" onclick={() => select(f, staged)} title="{f.rel} · {LABEL[f.status] ?? f.status}">
       <FileIcon name={nome} />
@@ -91,12 +92,12 @@
       {#if cart}<span class="fd">{cart}</span>{/if}
     </button>
     <span class="facts">
-      {#if f.status !== "D"}<button onclick={() => studio.openFile(f.path)} title="Apri nell'editor" aria-label="Apri {nome} nell'editor"><Icon name="draft" size={12} /></button>{/if}
+      {#if f.status !== "D"}<button onclick={() => ws.openFile(f.path)} title="Apri nell'editor" aria-label="Apri {nome} nell'editor"><Icon name="draft" size={12} /></button>{/if}
       {#if staged}
-        <button onclick={() => git.unstage([f.path])} title="Togli dai pronti" aria-label="Togli {nome} dai pronti"><Icon name="minus" size={13} /></button>
+        <button onclick={() => ws.git.unstage([f.path])} title="Togli dai pronti" aria-label="Togli {nome} dai pronti"><Icon name="minus" size={13} /></button>
       {:else}
-        <button class="danger" class:armed={armed === f.path} onclick={() => arm(f.path, () => git.discard([f.path]))} title={armed === f.path ? "Clicca ancora: le modifiche si perdono (i file nuovi vanno nel Cestino)" : "Annulla le modifiche"} aria-label="Annulla le modifiche a {nome}"><Icon name="undo" size={12} /></button>
-        <button onclick={() => git.stage([f.path])} title="Prepara per il commit" aria-label="Prepara {nome}"><Icon name="plus" size={13} /></button>
+        <button class="danger" class:armed={armed === f.path} onclick={() => arm(f.path, () => ws.git.discard([f.path]))} title={armed === f.path ? "Clicca ancora: le modifiche si perdono (i file nuovi vanno nel Cestino)" : "Annulla le modifiche"} aria-label="Annulla le modifiche a {nome}"><Icon name="undo" size={12} /></button>
+        <button onclick={() => ws.git.stage([f.path])} title="Prepara per il commit" aria-label="Prepara {nome}"><Icon name="plus" size={13} /></button>
       {/if}
     </span>
     <em class="st st-{f.status === '?' ? 'n' : f.status}" title={LABEL[f.status] ?? f.status}>{badge(f.status)}</em>
@@ -114,27 +115,27 @@
         </button>
         {#if menu}
           <div class="menu" use:outside transition:fly={{ y: -6, duration: 160, easing: cubicOut }} role="menu">
-            <input class="input sm" placeholder="Cerca o crea un ramo…" bind:value={filter} onkeydown={(e) => e.key === "Enter" && canCreate && !shown.length && (git.checkout(newName, true), (menu = false))} />
+            <input class="input sm" placeholder="Cerca o crea un ramo…" bind:value={filter} onkeydown={(e) => e.key === "Enter" && canCreate && !shown.length && (ws.git.checkout(newName, true), (menu = false))} />
             <div class="list">
               {#each shown as b (b.name)}
-                <button class="mi" class:cur={b.current} onclick={() => { if (!b.current) git.checkout(b.name); menu = false; }} role="menuitem">
+                <button class="mi" class:cur={b.current} onclick={() => { if (!b.current) ws.git.checkout(b.name); menu = false; }} role="menuitem">
                   <span class="dot" class:cur={b.current}>{#if b.current}<Icon name="check" size={10} stroke={2.4} />{/if}</span>
                   <span class="mn">{b.name}</span>
                   <span class="mw">{b.when}</span>
                 </button>
               {/each}
               {#if canCreate}
-                <button class="mi new" onclick={() => { git.checkout(newName, true); menu = false; }} role="menuitem">
+                <button class="mi new" onclick={() => { ws.git.checkout(newName, true); menu = false; }} role="menuitem">
                   <span class="dot"><Icon name="plus" size={10} stroke={2.2} /></span>
                   <span class="mn">Crea il ramo <b>{newName}</b></span>
                 </button>
               {/if}
             </div>
             <div class="msep"></div>
-            <button class="mi" disabled={!total} onclick={() => { git.stash(); menu = false; }} role="menuitem">
+            <button class="mi" disabled={!total} onclick={() => { ws.git.stash(); menu = false; }} role="menuitem">
               <span class="dot"><Icon name="archive" size={11} /></span><span class="mn">Metti da parte le modifiche</span>
             </button>
-            <button class="mi" disabled={!s.stash} onclick={() => { git.stash(true); menu = false; }} role="menuitem">
+            <button class="mi" disabled={!s.stash} onclick={() => { ws.git.stash(true); menu = false; }} role="menuitem">
               <span class="dot"><Icon name="download" size={11} /></span><span class="mn">Riprendi dallo stash</span>{#if s.stash}<span class="mw">{s.stash}</span>{/if}
             </button>
             {#if log.length}
@@ -154,13 +155,13 @@
         {/if}
       </div>
       <div class="sync">
-        <button onclick={() => git.sync("pull")} disabled={!!git.busy || !s.upstream} class:has={!!s.behind} title={s.upstream ? `Aggiorna da ${s.upstream}` : "Nessun ramo remoto collegato"} aria-label="Aggiorna dal remoto">
+        <button onclick={() => ws.git.sync("pull")} disabled={!!ws.git.busy || !s.upstream} class:has={!!s.behind} title={s.upstream ? `Aggiorna da ${s.upstream}` : "Nessun ramo remoto collegato"} aria-label="Aggiorna dal remoto">
           <Icon name="arrowDown" size={12} />{#if s.behind}<b>{s.behind}</b>{/if}
         </button>
-        <button onclick={() => git.sync("push")} disabled={!!git.busy} class:has={!!s.ahead || !s.upstream} title={s.upstream ? `Invia a ${s.upstream}` : "Pubblica il ramo sul remoto"} aria-label="Invia al remoto">
+        <button onclick={() => ws.git.sync("push")} disabled={!!ws.git.busy} class:has={!!s.ahead || !s.upstream} title={s.upstream ? `Invia a ${s.upstream}` : "Pubblica il ramo sul remoto"} aria-label="Invia al remoto">
           <Icon name="arrowUp" size={12} />{#if s.ahead}<b>{s.ahead}</b>{/if}
         </button>
-        <button onclick={() => git.sync("fetch")} disabled={!!git.busy} class:spin={git.busy === "fetch" || git.busy === "pull" || git.busy === "push"} title="Controlla il remoto" aria-label="Controlla il remoto">
+        <button onclick={() => ws.git.sync("fetch")} disabled={!!ws.git.busy} class:spin={ws.git.busy === "fetch" || ws.git.busy === "pull" || ws.git.busy === "push"} title="Controlla il remoto" aria-label="Controlla il remoto">
           <Icon name="sync" size={12} />
         </button>
       </div>
@@ -170,56 +171,56 @@
       <div class="box">
         <textarea
           rows="2"
-          bind:value={git.message}
+          bind:value={ws.git.message}
           onkeydown={keydown}
           placeholder={amend ? "Nuovo messaggio (vuoto = lo stesso)" : total ? "Messaggio del commit" : "Nessuna modifica"}
           aria-label="Messaggio del commit"
         ></textarea>
-        <button class="ai" class:busy={git.busy === "suggest"} disabled={!total || !!git.busy} onclick={() => git.suggest()} title="Scrivi il messaggio con Claude" aria-label="Suggerisci il messaggio">
+        <button class="ai" class:busy={ws.git.busy === "suggest"} disabled={!total || !!ws.git.busy} onclick={() => ws.git.suggest()} title="Scrivi il messaggio con Claude" aria-label="Suggerisci il messaggio">
           <Icon name="spark" size={13} />
         </button>
       </div>
       <div class="crow">
-        <button class="btn btn-primary cbtn" disabled={!canCommit} onclick={() => { git.commit({ amend }); amend = false; }} title="⌘↵">
-          {#if git.busy === "commit"}<span class="spinner"></span>{:else}<Icon name="commit" size={14} />{/if}
-          {amend ? "Correggi" : "Commit"}{#if !amend && total}<span class="cnt">{git.staged.length || total}</span>{/if}
+        <button class="btn btn-primary cbtn" disabled={!canCommit} onclick={() => { ws.git.commit({ amend }); amend = false; }} title="⌘↵">
+          {#if ws.git.busy === "commit"}<span class="spinner"></span>{:else}<Icon name="commit" size={14} />{/if}
+          {amend ? "Correggi" : "Commit"}{#if !amend && total}<span class="cnt">{ws.git.staged.length || total}</span>{/if}
         </button>
-        <button class="btn btn-line pbtn" disabled={!canCommit} onclick={() => { git.commit({ amend, push: true }); amend = false; }} title="Commit e invia al remoto" aria-label="Commit e invia">
+        <button class="btn btn-line pbtn" disabled={!canCommit} onclick={() => { ws.git.commit({ amend, push: true }); amend = false; }} title="Commit e invia al remoto" aria-label="Commit e invia">
           <Icon name="arrowUp" size={13} />
         </button>
       </div>
       <label class="amendt"><input type="checkbox" bind:checked={amend} /> Correggi l'ultimo commit</label>
-      {#if !git.staged.length && git.changed.length && !amend}<p class="tip">Nessun file pronto: il commit li includerà tutti.</p>{/if}
+      {#if !ws.git.staged.length && ws.git.changed.length && !amend}<p class="tip">Nessun file pronto: il commit li includerà tutti.</p>{/if}
     </div>
 
-    {#if git.staged.length}
+    {#if ws.git.staged.length}
       <div class="grp">
         <button class="gh" onclick={() => (openStaged = !openStaged)} aria-expanded={openStaged}>
-          <span class="chev" class:open={openStaged}><Icon name="chevron" size={10} /></span> Pronte <span class="pill ok">{git.staged.length}</span>
+          <span class="chev" class:open={openStaged}><Icon name="chevron" size={10} /></span> Pronte <span class="pill ok">{ws.git.staged.length}</span>
         </button>
         <span class="gacts">
-          <button onclick={() => git.showDiff(null, true)} title="Vedi tutte le differenze pronte" aria-label="Vedi differenze pronte"><Icon name="layers" size={12} /></button>
-          <button onclick={() => git.unstage([])} title="Togli tutti dai pronti" aria-label="Togli tutti"><Icon name="minus" size={13} /></button>
+          <button onclick={() => ws.git.showDiff(null, true)} title="Vedi tutte le differenze pronte" aria-label="Vedi differenze pronte"><Icon name="layers" size={12} /></button>
+          <button onclick={() => ws.git.unstage([])} title="Togli tutti dai pronti" aria-label="Togli tutti"><Icon name="minus" size={13} /></button>
         </span>
       </div>
       {#if openStaged}
-        <div transition:slide={{ duration: 160 }}>{#each git.staged as f (f.path)}{@render row(f, true)}{/each}</div>
+        <div transition:slide={{ duration: 160 }}>{#each ws.git.staged as f (f.path)}{@render row(f, true)}{/each}</div>
       {/if}
     {/if}
 
-    {#if git.changed.length}
+    {#if ws.git.changed.length}
       <div class="grp">
         <button class="gh" onclick={() => (openChanged = !openChanged)} aria-expanded={openChanged}>
-          <span class="chev" class:open={openChanged}><Icon name="chevron" size={10} /></span> Modifiche <span class="pill warm">{git.changed.length}</span>
+          <span class="chev" class:open={openChanged}><Icon name="chevron" size={10} /></span> Modifiche <span class="pill warm">{ws.git.changed.length}</span>
         </button>
         <span class="gacts">
-          <button onclick={() => git.showDiff(null, false)} title="Vedi tutte le differenze" aria-label="Vedi differenze"><Icon name="layers" size={12} /></button>
-          <button class="danger" class:armed={armed === "*"} onclick={() => arm("*", () => git.discard(git.changed.map((f) => f.path)))} title={armed === "*" ? "Clicca ancora: annulla TUTTE le modifiche" : "Annulla tutte le modifiche"} aria-label="Annulla tutte le modifiche"><Icon name="undo" size={12} /></button>
-          <button onclick={() => git.stage([])} title="Prepara tutti" aria-label="Prepara tutti"><Icon name="plus" size={13} /></button>
+          <button onclick={() => ws.git.showDiff(null, false)} title="Vedi tutte le differenze" aria-label="Vedi differenze"><Icon name="layers" size={12} /></button>
+          <button class="danger" class:armed={armed === "*"} onclick={() => arm("*", () => ws.git.discard(ws.git.changed.map((f) => f.path)))} title={armed === "*" ? "Clicca ancora: annulla TUTTE le modifiche" : "Annulla tutte le modifiche"} aria-label="Annulla tutte le modifiche"><Icon name="undo" size={12} /></button>
+          <button onclick={() => ws.git.stage([])} title="Prepara tutti" aria-label="Prepara tutti"><Icon name="plus" size={13} /></button>
         </span>
       </div>
       {#if openChanged}
-        <div transition:slide={{ duration: 160 }}>{#each git.changed as f (f.path)}{@render row(f, false)}{/each}</div>
+        <div transition:slide={{ duration: 160 }}>{#each ws.git.changed as f (f.path)}{@render row(f, false)}{/each}</div>
       {/if}
     {/if}
 

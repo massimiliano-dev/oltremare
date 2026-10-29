@@ -30,6 +30,20 @@
     } catch {}
   }
 
+  let seeding = $state(false);
+  async function seed() {
+    seeding = true;
+    try {
+      const n = await api.memorySeed();
+      ui.toast(n ? `Scritte ${n} note dei progetti` : "Le note dei progetti erano già tutte complete");
+      await loadMemory();
+    } catch (e) {
+      ui.toast(errorText(e), "error");
+    } finally {
+      seeding = false;
+    }
+  }
+
   async function toggleMemory(on: boolean) {
     await settings.save({ memoryEnabled: on });
     await loadMemory();
@@ -120,6 +134,12 @@
     {/if}
     <button class="btn btn-line sm" onclick={pickMemory}><Icon name="folder" size={13} /> {s.memoryPath ? "Cambia" : "Scegli"}</button>
   </div>
+  {#if mem?.ready}
+    <div class="row-btns">
+      <button class="btn btn-quiet sm" disabled={seeding} onclick={seed}><Icon name="layers" size={13} /> {seeding ? "Scrivo le note…" : "Crea le note dei progetti dello Studio"}</button>
+      <small class="help">Una nota per ogni progetto, con una prima stesura di «Com'è fatto» (tecnologie, cartelle, comandi). Le note già complete non si toccano.</small>
+    </div>
+  {/if}
 </section>
 
 <section>
