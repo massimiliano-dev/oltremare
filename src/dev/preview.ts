@@ -34,7 +34,7 @@ let settings: Settings = {
   quietFrom: "22:00", quietTo: "07:30", briefingEnabled: true, briefingTime: "08:00", briefingDays: [1, 2, 3, 4, 5],
   accentHue: 275, accentChroma: 0.2, density: "comfortable", fontScale: 1, paletteHotkey: "Alt+Space", autostart: false, layout: "operator",
   mcpServers: [{ id: "m1", name: "issue", kind: "http", url: "https://issue.example.com/api/mcp", headersHelper: 'cat "$HOME/.issue/headers.json"', command: "", args: [], enabled: true }],
-  editorApp: "", devMode: "editor", companionStyle: "island", browserVisible: false, computerWaitIdle: true,
+  editorApp: "", devMode: "editor", companionStyle: "island", browserVisible: false, computerWaitIdle: true, memoryEnabled: true, memoryPath: "/Users/demo/Desktop/Obsidian",
 };
 const keys = { anthropic: scenario !== "empty", openai: scenario !== "empty" };
 
@@ -301,6 +301,9 @@ export function installPreview() {
         }
         case "dev_file":
           return { path: a.path, content: "export function totale(righe: Riga[]) {\n  return righe.reduce((s, r) => s + r.prezzo * r.qta, 0);\n}\n", binary: false, truncated: false, size: 120, ext: "ts" };
+        case "memory_info":
+          return { enabled: true, path: "/Users/demo/Desktop/Obsidian", ready: true, notes: 23, obsidian: true, projectNote: a.project ? "/Users/demo/Desktop/Obsidian/Progetti/negozio.md" : null, suggested: null };
+        case "memory_open": return null;
         case "git_state": {
           const B = "/Users/demo/Sviluppo/negozio/";
           return { repo: true, branch: "feature/NEG-12-sconti", upstream: "origin/feature/NEG-12-sconti", ahead: 2, behind: 1, stash: 1, last: "a1b2c3d Carrello: righe e totale",

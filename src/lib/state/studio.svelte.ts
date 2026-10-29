@@ -52,6 +52,10 @@ class StudioState {
   planChoice = $state<"auto" | "yes" | "no">("auto");
   profile = $state("");
   draft = $state("");
+  /** Nota del progetto nella memoria (Obsidian), se c'è */
+  memoryNote = $state<string | null>(null);
+  /** «Nuova conversazione»: la prossima richiesta non continua la sessione precedente */
+  fresh = $state(false);
   private taskId = 0;
 
   current = $derived(this.files.find((f) => f.path === this.active) ?? null);
@@ -91,6 +95,8 @@ class StudioState {
     this.active = null;
     this.tasks = [];
     await dev.open(proj.path);
+    // La conversazione del progetto riprende da dove era rimasta
+    this.restore(proj.path);
     dev.start();
     git.start(proj.path);
     document.title = `${proj.name} · Oltremare Studio`;
@@ -98,6 +104,7 @@ class StudioState {
 
   close() {
     this.queue = [];
+    this.memoryNote = null;
     dev.stop();
     git.stop();
     this.project = null;
@@ -174,7 +181,9 @@ class StudioState {
         if (this.planChoice === "auto") t.plan = t.decision.plan;
       }
       t.phase = t.plan ? "planning" : "working";
-      const r = await api.studioRun(proj.path, t.text, t.model, t.plan, t.profile || undefined, newSession ? undefined : (dev.session?.id ?? undefined), newSession);
+      const nuova = newSession || this.fresh;
+      this.fresh = false;
+      const r = await api.studioRun(proj.path, t.text, t.model, t.plan, t.profile || undefined, nuova ? undefined : (dev.sessionId ?? dev.session?.id ?? undefined), nuova);
       t.session = r.session;
       dev.sessionId = r.session || null;
       dev.refreshSession();
@@ -182,6 +191,38 @@ class StudioState {
       t.phase = "error";
       t.error = errorText(e);
     }
+  }
+
+  /** Compiti dell'orchestratore salvati per progetto (gli ultimi 30). */
+  persist() {
+    if (!this.project) return;
+    try {
+      localStorage.setItem(`oltremare:studio-tasks:${this.project.path}`, JSON.stringify({ tasks: this.tasks.slice(-30), fresh: this.fresh }));
+    } catch {}
+  }
+
+  private restore(path: string) {
+    const saved = load<{ tasks: Task[]; fresh?: boolean } | null>(`oltremare:studio-tasks:${path}`, null);
+    // Ciò che era a metà quando lo Studio si è chiuso non può riprendere: si mostra come concluso
+    this.tasks = (saved?.tasks ?? []).map((t) => (["deciding", "planning", "working"].includes(t.phase) ? { ...t, phase: "done" as const } : t));
+    this.fresh = !!saved?.fresh;
+    this.taskId = Math.max(0, ...this.tasks.map((t) => t.id));
+    const sid = [...this.tasks].reverse().find((t) => t.session)?.session;
+    if (sid && !this.fresh) dev.sessionId = sid;
+    this.refreshMemory();
+  }
+
+  async refreshMemory() {
+    if (!this.project) return;
+    this.memoryNote = (await api.memoryInfo(this.project.path).catch(() => null))?.projectNote ?? null;
+  }
+
+  /** Nuova conversazione: si svuota la vista e la prossima richiesta parte da una sessione nuova. */
+  newConversation() {
+    dev.sessionId = null;
+    this.tasks = [];
+    this.queue = [];
+    this.fresh = true;
   }
 
   enqueue(text: string) {
@@ -225,6 +266,8 @@ class StudioState {
     } else if (t.phase === "working") {
       t.phase = "done";
       this.reloadClean();
+      // La nota del progetto in memoria nasce (o si aggiorna) a fine lavoro
+      this.refreshMemory();
     }
     this.drain();
   }

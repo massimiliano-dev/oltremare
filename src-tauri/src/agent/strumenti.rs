@@ -32,7 +32,7 @@ pub struct ContestoRun {
 
 impl ContestoRun {
     pub fn strumenti(&self) -> Vec<&'static tools::ToolSpec> {
-        tools::abilitati(&self.agent.tools)
+        tools::dell_agente(&self.agent.tools, &self.app.state::<App>().store.settings())
     }
 
     pub fn decisione(&self, t: &tools::ToolSpec) -> &'static str {

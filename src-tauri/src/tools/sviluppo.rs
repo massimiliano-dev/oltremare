@@ -81,6 +81,8 @@ pub struct Opzioni {
     pub ambiente: Vec<(String, String)>,
     /// Istruzioni in più per questa esecuzione
     pub istruzioni: String,
+    /// Cartelle fuori dal progetto in cui Claude può scrivere (es. le note dei progetti nella memoria)
+    pub cartelle: Vec<PathBuf>,
 }
 
 fn comando_headless(bin: &Path, cartella: &Path, messaggio: &str, sessione: Option<&str>, s: &crate::store::Settings) -> tokio::process::Command {
@@ -117,6 +119,9 @@ pub(crate) fn comando_headless_con(bin: &Path, cartella: &Path, messaggio: &str,
     }
     for (k, v) in &o.ambiente {
         cmd.env(k, v);
+    }
+    for c in &o.cartelle {
+        cmd.arg("--add-dir").arg(c);
     }
     if let Some(sid) = sessione {
         cmd.args(["--resume", sid]);
@@ -737,10 +742,13 @@ pub async fn avvia_headless_con(app: &AppHandle, cartella: &Path, messaggio: &st
     let inizio = crate::store::now_ms();
     let provider = if o.ambiente.iter().any(|(k, _)| k == "ANTHROPIC_BASE_URL") { "claudex" } else { "claude-code" };
     let titolo: String = messaggio.chars().take(80).collect();
+    // Il lavoro fatto (non i piani) finisce nel diario del progetto in memoria
+    let memoria = (o.modo != "plan").then(|| crate::memoria::cartella(&s)).flatten();
+    let richiesta = messaggio.to_string();
     let finito: std::sync::Arc<std::sync::Mutex<Option<(bool, String)>>> = Default::default();
     let (tx, rx) = tokio::sync::oneshot::channel::<String>();
     {
-        let (sid, finito, app) = (sid.clone(), finito.clone(), app.clone());
+        let (sid, finito, app, memoria, richiesta) = (sid.clone(), finito.clone(), app.clone(), memoria.clone(), richiesta.clone());
         let cartella = cartella.to_path_buf();
         tokio::spawn(async move {
             let mut tx = Some(tx);
@@ -774,6 +782,10 @@ pub async fn avvia_headless_con(app: &AppHandle, cartella: &Path, messaggio: &st
                     let modello = v["modelUsage"].as_object().and_then(|m| m.iter().max_by(|a, b| a.1["costUSD"].as_f64().unwrap_or(0.0).total_cmp(&b.1["costUSD"].as_f64().unwrap_or(0.0))).map(|(k, _)| k.clone()));
                     let sessione = sid.lock().map(|x| x.clone()).unwrap_or_default();
                     let stato = if v["is_error"].as_bool() == Some(true) { "error" } else { "done" };
+                    if let Some(dir) = &memoria {
+                        let nome = cartella.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                        let _ = crate::memoria::lavoro_progetto(dir, &nome, &cartella, &richiesta, v["result"].as_str().unwrap_or_default(), stato == "done");
+                    }
                     let _ = app.state::<App>().db.registra_esterna(
                         &uuid::Uuid::new_v4().to_string(), &sessione, "studio", &titolo, stato, inizio, crate::store::now_ms(), &usage, None, modello.as_deref(), provider,
                     );

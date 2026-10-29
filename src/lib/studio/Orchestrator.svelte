@@ -9,7 +9,7 @@
   import { settings } from "../state/settings.svelte";
   import ToolGlyph, { toolKind, TOOL_LABEL } from "./ToolGlyph.svelte";
   import FileIcon from "../dev/FileIcon.svelte";
-  import type { DevItem } from "../api";
+  import { api, type DevItem } from "../api";
 
   let { prompt = "" }: { prompt?: string } = $props();
   let text = $state("");
@@ -46,6 +46,13 @@
   const running = $derived(!!dev.session?.running);
   const profiles = $derived(studio.claudex?.profiles ?? []);
   const aiName = (p: string) => (p ? p : "Claude");
+
+  // I compiti si salvano per progetto: riaprendolo, la conversazione continua
+  $effect(() => {
+    void JSON.stringify(studio.tasks);
+    void studio.fresh;
+    studio.persist();
+  });
 
   // Fine del lavoro di Claude: piano pronto o lavoro concluso
   let prima = false;
@@ -122,7 +129,10 @@
     {#if running && dev.session?.here}
       <button class="icon-btn" title="Ferma Claude" aria-label="Ferma" onclick={() => dev.stopClaude()}><Icon name="stop" size={14} /></button>
     {/if}
-    <button class="icon-btn" title="Nuova conversazione" aria-label="Nuova conversazione" onclick={() => { dev.sessionId = null; studio.tasks = []; text = ""; }}><Icon name="plus" size={15} /></button>
+    {#if studio.memoryNote}
+      <button class="icon-btn" title="Memoria del progetto: com'è fatto, decisioni, diario dei lavori (si apre in Obsidian)" aria-label="Memoria del progetto" onclick={() => api.memoryOpen(studio.memoryNote ?? undefined)}><Icon name="book" size={15} /></button>
+    {/if}
+    <button class="icon-btn" title="Nuova conversazione" aria-label="Nuova conversazione" onclick={() => { studio.newConversation(); text = ""; }}><Icon name="plus" size={15} /></button>
   </header>
 
   <div class="msgs" bind:this={scroller}>

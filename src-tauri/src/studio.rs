@@ -449,7 +449,26 @@ pub async fn studio_run(handle: AppHandle, project: String, text: String, model:
             l.server, l.project, l.name, l.server
         )
     });
+    // Memoria del progetto: Claude sa già com'è fatto e cosa si è deciso, e alla fine aggiorna la nota
+    let mut cartelle = vec![];
+    let memoria = crate::memoria::cartella(&st.store.settings()).and_then(|dir| {
+        let nome = p.file_name()?.to_string_lossy().into_owned();
+        let nota = crate::memoria::nota_progetto(&dir, &nome, &p).ok()?;
+        cartelle.push(nota.parent()?.to_path_buf());
+        Some(format!(
+            "\n\nMemoria del progetto (nota di Obsidian {}):\n<memoria_progetto>\n{}\n</memoria_progetto>\n\
+Usala come punto di partenza invece di riesplorare tutto. {}",
+            nota.display(),
+            crate::memoria::contesto_progetto(&nota),
+            if plan {
+                "In modalità piano non modificarla."
+            } else {
+                "Alla fine, se hai imparato qualcosa di stabile, aggiorna quella nota con Edit: la sezione «Com'è fatto» (stack, struttura delle cartelle, comandi per avviare, testare e compilare, convenzioni, punti delicati: concisa, da riscrivere se è superata) e «Decisioni» (scelte importanti con il perché, una riga ciascuna). Non toccare «Diario dei lavori»: lo aggiorna Oltremare."
+            }
+        ))
+    });
     let o = Opzioni {
+        cartelle,
         modello: match model.as_str() {
             "auto" => String::new(),
             // Fable non ha un alias in Claude Code: si usa il nome del modello
@@ -459,9 +478,10 @@ pub async fn studio_run(handle: AppHandle, project: String, text: String, model:
         modo: if plan { "plan".into() } else { "acceptEdits".into() },
         ambiente,
         istruzioni: format!(
-            "{}{}",
+            "{}{}{}",
             if plan { "Ora sei in modalità piano: esplora e proponi un piano concreto (file da toccare, passi, come verificare), senza modificare nulla. L'utente lo approverà prima dell'esecuzione. Scrivi il piano completo nel tuo ultimo messaggio: Oltremare lo mostra con il pulsante «Approva ed esegui» (non cercare né usare ExitPlanMode e non chiedere approvazione a parole)." } else { "" },
-            collegamento.unwrap_or_default()
+            collegamento.unwrap_or_default(),
+            memoria.unwrap_or_default()
         ),
     };
     let sid = sviluppo::avvia_headless_con(&handle, &p, &text, sessione, o).await.map_err(AppError::msg)?;

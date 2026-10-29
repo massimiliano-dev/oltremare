@@ -82,6 +82,9 @@ pub struct Settings {
     pub studio_roots: Vec<String>,
     /// Progetto dello Studio (cartella) → progetto nel gestionale delle issue (server MCP e chiave)
     pub studio_links: std::collections::BTreeMap<String, StudioLink>,
+    /// Memoria a lungo termine: cartella di note Markdown (un vault di Obsidian va benissimo)
+    pub memory_enabled: bool,
+    pub memory_path: String,
     /// Il browser degli agenti si vede (finestra) o lavora invisibile
     pub browser_visible: bool,
     /// Il controllo dello schermo aspetta che l'utente lasci mouse e tastiera
@@ -163,6 +166,8 @@ impl Default for Settings {
             companion_style: "island".into(),
             studio_roots: vec![],
             studio_links: Default::default(),
+            memory_enabled: true,
+            memory_path: String::new(),
             browser_visible: false,
             computer_wait_idle: true,
             accent_hue: 275.0,
@@ -368,6 +373,17 @@ impl Store {
                 a.version = AGENT_VERSION;
                 let _ = s.save_agent(&a);
             }
+        }
+        // La memoria usa la cartella di Obsidian, se c'è (una volta sola: poi decide l'utente)
+        if s.pref("migrazione:memoria").is_none() {
+            let mut st = s.settings();
+            if st.memory_path.is_empty() {
+                if let Some(v) = crate::memoria::trova_vault() {
+                    st.memory_path = v.to_string_lossy().into_owned();
+                    let _ = s.save_settings(&st);
+                }
+            }
+            let _ = s.set_pref("migrazione:memoria", serde_json::json!(true));
         }
         // Versione 4: arriva lo Sviluppatore (una volta sola; se l'utente lo elimina non torna)
         if s.pref("migrazione:sviluppatore").is_none() {

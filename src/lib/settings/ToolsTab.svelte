@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import Icon from "../Icon.svelte";
-  import { api, errorText, type McpServer } from "../api";
+  import { api, errorText, type McpServer, type MemoryInfo } from "../api";
   import { settings } from "../state/settings.svelte";
   import { mcp } from "../state/mcp.svelte";
   import { ui } from "../state/ui.svelte";
@@ -13,8 +13,30 @@
   let secretText = $state("");
   let secrets = $state<Record<string, { headers: boolean; env: boolean }>>({});
   let importing = $state(false);
+  let mem = $state<MemoryInfo | null>(null);
+
+  async function loadMemory() {
+    mem = await api.memoryInfo().catch(() => null);
+  }
+
+  async function pickMemory() {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const r = await open({ directory: true, title: "Cartella della memoria (un vault di Obsidian va benissimo)" });
+      if (typeof r === "string") {
+        await settings.save({ memoryPath: r, memoryEnabled: true });
+        await loadMemory();
+      }
+    } catch {}
+  }
+
+  async function toggleMemory(on: boolean) {
+    await settings.save({ memoryEnabled: on });
+    await loadMemory();
+  }
 
   onMount(async () => {
+    loadMemory();
     editors = await api.editors().catch(() => []);
     for (const x of s.mcpServers) secrets[x.id] = await api.mcpSecretHas(x.id).catch(() => ({ headers: false, env: false }));
   });
@@ -72,6 +94,33 @@
     settings.save({ mcpServers: s.mcpServers.map((y) => (y.id === x.id ? { ...y, enabled: on } : y)) });
   }
 </script>
+
+<section>
+  <div class="head">
+    <h3>Memoria</h3>
+    {#if mem?.ready}
+      <button class="btn btn-quiet sm" onclick={() => api.memoryOpen().catch((e) => ui.toast(errorText(e), "error"))}><Icon name="book" size={13} /> {mem.obsidian ? "Apri in Obsidian" : "Apri la cartella"}</button>
+    {/if}
+  </div>
+  <p class="help">Gli agenti ricordano in note Markdown collegate tra loro, che puoi leggere e modificare anche con Obsidian: persone, progetti, preferenze, decisioni. Il briefing finisce nella nota del giorno e ogni progetto dello Studio ha una nota con com'è fatto, le decisioni e il diario dei lavori. Le note non si cancellano mai: se un agente ne riscrive una, la versione vecchia resta nella cartella .trash.</p>
+  <div class="srv" class:off={!s.memoryEnabled}>
+    <input type="checkbox" checked={s.memoryEnabled} onchange={(e) => toggleMemory((e.target as HTMLInputElement).checked)} aria-label="Memoria attiva" />
+    <span class="dot" class:ok={mem?.ready}></span>
+    <span class="who">
+      <strong>{s.memoryPath ? s.memoryPath.replace(/^\/Users\/[^/]+/, "~") : "Nessuna cartella scelta"}</strong>
+      <small>
+        {#if !s.memoryEnabled}Spenta: gli agenti non ricordano nulla tra una conversazione e l'altra
+        {:else if !s.memoryPath}Scegli una cartella{mem?.suggested ? `: ho trovato ${mem.suggested.replace(/^\/Users\/[^/]+/, "~")}` : ""}
+        {:else if !mem?.ready}La cartella non esiste più: scegline un'altra
+        {:else}{mem.notes} {mem.notes === 1 ? "nota" : "note"} · gli agenti scrivono senza chiedere{/if}
+      </small>
+    </span>
+    {#if !s.memoryPath && mem?.suggested}
+      <button class="btn btn-quiet sm" onclick={async () => { await settings.save({ memoryPath: mem!.suggested!, memoryEnabled: true }); loadMemory(); }}>Usa questa</button>
+    {/if}
+    <button class="btn btn-line sm" onclick={pickMemory}><Icon name="folder" size={13} /> {s.memoryPath ? "Cambia" : "Scegli"}</button>
+  </div>
+</section>
 
 <section>
   <div class="head">

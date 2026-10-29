@@ -138,6 +138,18 @@ export interface Settings {
   companionStyle: "island" | "floating";
   browserVisible: boolean;
   computerWaitIdle: boolean;
+  memoryEnabled: boolean;
+  memoryPath: string;
+}
+
+export interface MemoryInfo {
+  enabled: boolean;
+  path: string;
+  ready: boolean;
+  notes: number;
+  obsidian: boolean;
+  projectNote?: string | null;
+  suggested?: string | null;
 }
 
 export interface UsageTotals {
@@ -578,6 +590,8 @@ export const api = {
   studioLinkSet: (project: string, server: string, key: string, name: string) => invoke<void>("studio_link_set", { project, server, key, name }),
   studioLinkSuggest: (project: string, server: string) => invoke<{ key: string; name: string }[]>("studio_link_suggest", { project, server }),
   studioIssues: (project: string) => invoke<{ issues: { key: string; title: string; status: string; extra: string | null }[] }>("studio_issues", { project }),
+  memoryInfo: (project?: string) => invoke<MemoryInfo>("memory_info", { project }),
+  memoryOpen: (path?: string) => invoke<void>("memory_open", { path }),
   gitState: (project: string) => invoke<GitState>("git_state", { project }),
   gitDiff: (project: string, staged: boolean, file?: string) => invoke<string>("git_diff", { project, file, staged }),
   gitStage: (project: string, files: string[]) => invoke<void>("git_stage", { project, files }),

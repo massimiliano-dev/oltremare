@@ -6,7 +6,9 @@ use std::collections::HashSet;
 
 /// "allow" | "ask" | "deny"
 pub fn decisione(agent: &Agent, t: &ToolSpec, consentiti_sessione: &HashSet<String>) -> &'static str {
+    // La memoria è un'area sicura (non si cancella nulla, le riscritture lasciano una copia): si scrive senza chiedere
     let regola = agent.policy.per_tool.get(t.nome).map(String::as_str).unwrap_or(match t.rischio {
+        _ if t.categoria == "memoria" => "allow",
         Rischio::Read => agent.policy.read_default.as_str(),
         Rischio::Write => agent.policy.write_default.as_str(),
         Rischio::Danger => agent.policy.danger_default.as_str(),

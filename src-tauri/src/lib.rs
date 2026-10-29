@@ -10,6 +10,7 @@ mod git;
 mod isola;
 mod mcp;
 mod mcp_client;
+mod memoria;
 mod permessi;
 mod modelli;
 mod notifiche;
@@ -898,6 +899,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             settings_get,
             settings_save,
+            memoria::memory_info,
+            memoria::memory_open,
             provider_key_set,
             provider_models,
             provider_test,
