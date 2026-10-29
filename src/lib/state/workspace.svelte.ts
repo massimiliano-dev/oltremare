@@ -26,6 +26,8 @@ export interface Task {
   session: string | null;
   phase: Phase;
   planText?: string;
+  /** Piano scartato dall'utente (resta visibile, ma non si esegue) */
+  dropped?: boolean;
   opinion?: string;
   error?: string;
   /** Revisione: sessione in corso, verdetti dei revisori (CTO e, se c'è, un'altra AI), verdetto unito,
@@ -267,7 +269,10 @@ export class Workspace {
   /** Quando Claude finisce: piano pronto da approvare, lavoro da far rivedere al CTO, oppure verdetto arrivato. */
   async onFinished() {
     const t = this.lastTask;
-    if (!t) return;
+    if (!t || t.phase === "error" || t.phase === "done") {
+      this.drain();
+      return;
+    }
     if (t.phase === "planning" && t.session) {
       const r = await api.studioPlan(this.path, t.session).catch(() => ({ plan: "" }));
       t.planText = r.plan;
@@ -353,6 +358,24 @@ export class Workspace {
       t.phase = "error";
       t.error = errorText(e);
     }
+  }
+
+  /** Scarta il piano: non si esegue; la conversazione resta e la coda riparte. */
+  discard(t: Task) {
+    if (t.phase !== "plan-ready") return;
+    t.dropped = true;
+    t.phase = "done";
+    this.drain();
+  }
+
+  /** Ferma Claude (o il CTO) su questo compito e lo chiude come interrotto. */
+  async halt(t: Task) {
+    if (this.dev.session?.running) await this.dev.stopClaude();
+    if (["planning", "working", "reviewing"].includes(t.phase)) {
+      t.phase = "error";
+      t.error = "Fermato da te";
+    }
+    this.drain();
   }
 
   /** L'utente accetta il lavoro così com'è, nonostante i rilievi. */

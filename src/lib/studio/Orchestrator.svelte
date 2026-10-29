@@ -121,6 +121,7 @@
       case "review-ready":
         return "Il CTO chiede ancora correzioni: decidi tu";
       case "done":
+        if (t.dropped) return "Piano scartato";
         return t.review?.esito === "approvato" ? `Fatto · approvato dal CTO${t.review.voto ? ` (${t.review.voto}/10)` : ""}` : "Fatto";
       case "error":
         return t.error ?? "Errore";
@@ -195,6 +196,9 @@
         <div class="trow">
           {#if t.phase === "deciding" || t.phase === "planning" || t.phase === "working" || t.phase === "reviewing"}<span class="spin"></span>{:else if t.phase === "error"}<Icon name="alert" size={14} />{:else if t.phase === "review-ready"}<Icon name="shield" size={14} />{:else}<Icon name="check" size={14} />{/if}
           <span>{fase(t)}</span>
+          {#if t.phase === "planning" || t.phase === "working" || t.phase === "reviewing"}
+            <button class="halt" onclick={() => ws.halt(t)} title="Ferma e chiudi questo compito"><Icon name="stop" size={11} /> Ferma</button>
+          {/if}
         </div>
         {#if t.decision}
           <div class="chips">
@@ -220,6 +224,7 @@
               <option value="fable">con Fable</option>
             </select>
             <button class="btn btn-quiet sm" disabled={!notes.trim()} onclick={() => { ws.replan(t, notes); notes = ""; }}>Rifai il piano</button>
+            <button class="btn btn-quiet sm drop" onclick={() => { ws.discard(t); notes = ""; }} title="Non eseguire questo piano">Lascia perdere</button>
           </div>
         {/if}
 
@@ -574,6 +579,30 @@
     gap: 8px;
     font-size: var(--t-sm);
     font-weight: 600;
+  }
+  .halt {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: var(--t-xs);
+    font-weight: 600;
+    color: var(--ink-3);
+    box-shadow: inset 0 0 0 1px var(--rule);
+  }
+  .halt:hover {
+    color: var(--danger);
+    background: var(--danger-wash);
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--danger) 40%, transparent);
+  }
+  .drop {
+    margin-left: auto;
+    color: var(--ink-3);
+  }
+  .drop:hover {
+    color: var(--danger);
   }
   .chips {
     display: flex;
