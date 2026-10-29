@@ -274,9 +274,21 @@ pub async fn token(acc: &Account, tag: &str, s: &Settings) -> Result<String> {
         None if !t.client_id.is_empty() && acc.provider == "microsoft" => (t.client_id.clone(), None),
         None => return Err(AppError::msg("manca l'ID dell'applicazione per rinnovare l'accesso (Impostazioni → Account → Applicazioni OAuth)")),
     };
-    let v = token_request(p.token_url, &id, secret.as_deref(), &[("grant_type", "refresh_token"), ("refresh_token", &t.refresh_token), ("scope", &t.scope)])
-        .await
-        .map_err(|e| AppError::msg(format!("{e} — ricollega {} in Impostazioni → Account", acc.email)))?;
+    // Dopo il risveglio la rete può non essere ancora pronta: si riprova prima di arrendersi
+    let form = [("grant_type", "refresh_token"), ("refresh_token", t.refresh_token.as_str()), ("scope", t.scope.as_str())];
+    let mut tentativo = 0;
+    let v = loop {
+        match token_request(p.token_url, &id, secret.as_deref(), &form).await {
+            Ok(v) => break v,
+            Err(e) if e.e_rete() && tentativo < 3 => {
+                tentativo += 1;
+                tokio::time::sleep(std::time::Duration::from_secs([3, 6, 12][tentativo - 1])).await;
+            }
+            // Rete: l'accesso è ancora valido, non serve ricollegare
+            Err(e) if e.e_rete() => return Err(e),
+            Err(e) => return Err(AppError::msg(format!("{e} — ricollega {} in Impostazioni → Account", acc.email))),
+        }
+    };
     salva_token(tag, &acc.id, &v, &t.scope, Some(&t.refresh_token), &id)
 }
 

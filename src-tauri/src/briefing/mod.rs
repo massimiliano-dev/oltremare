@@ -3,7 +3,7 @@
 
 use crate::agent::ciclo::Avvio;
 use crate::agent::RunView;
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use crate::store::now_ms;
 use crate::App;
 use chrono::{Datelike, Local};
@@ -16,8 +16,11 @@ fn giorno_italiano(d: &chrono::DateTime<Local>) -> String {
     format!("{} {} {} {}", GIORNI[d.weekday().num_days_from_monday() as usize], d.day(), MESI[d.month0() as usize], d.year())
 }
 
-/// Raccoglie i dati e avvia il briefing.
-pub async fn esegui(app: &AppHandle) -> Result<RunView> {
+/// Messaggio dell'errore «rete non pronta»: chi avvia il briefing a orario riprova più tardi.
+pub const RETE_NON_PRONTA: &str = "Rete non ancora disponibile: riprovo tra poco";
+
+/// Raccoglie i dati e avvia il briefing. Con `anche_senza_rete` parte comunque, anche se nessun account risponde.
+pub async fn esegui(app: &AppHandle, anche_senza_rete: bool) -> Result<RunView> {
     let st = app.state::<App>();
     let s = st.store.settings();
     let agente = st.store.agent("briefing")?;
@@ -29,18 +32,28 @@ pub async fn esegui(app: &AppHandle) -> Result<RunView> {
         parti.push(format!("L'utente si chiama {}.", s.user_name.trim()));
     }
 
+    // Prima di leggere gli account si controlla che la rete risponda (qualunque risposta HTTP va bene)
+    let accounts = st.store.accounts();
+    if !anche_senza_rete && !accounts.is_empty() {
+        let host = if accounts.iter().any(|a| a.provider == "microsoft") { "https://graph.microsoft.com/v1.0/" } else { "https://www.googleapis.com/" };
+        let prova = crate::providers::client().get(host).timeout(std::time::Duration::from_secs(8)).send().await;
+        if prova.is_err() {
+            return Err(AppError::msg(RETE_NON_PRONTA));
+        }
+    }
+
     // Account: tutto in parallelo
     let mut calendario = String::new();
     let mut attivita = String::new();
     let mut posta = String::new();
-    let accounts = st.store.accounts();
     let lavori = accounts.iter().map(|acc| {
         let s = s.clone();
         let (oggi, domani) = (oggi.clone(), domani.clone());
         async move {
             let token = match crate::oauth::token(acc, "", &s).await {
                 Ok(t) => t,
-                Err(e) => return (acc.email.clone(), Err(format!("non riesco a leggere {}: {e}", acc.email))),
+                Err(e) if e.e_rete() => return (acc.email.clone(), Err((true, format!("rete non raggiungibile, non ho potuto leggere {}: {e}. L'account è collegato, non serve ricollegarlo", acc.email)))),
+                Err(e) => return (acc.email.clone(), Err((false, format!("non riesco a leggere {}: {e}", acc.email)))),
             };
             let ctx = crate::tools::posta::Ctx { acc, token };
             let (q_cal, q_att, q_mail) = (json!({ "da": oggi, "a": domani }), json!({}), json!({ "non_lette": true, "max": 15 }));
@@ -52,14 +65,18 @@ pub async fn esegui(app: &AppHandle) -> Result<RunView> {
             (acc.email.clone(), Ok((cal.testo, att.testo, mail.testo)))
         }
     });
-    for (email, r) in futures::future::join_all(lavori).await {
+    let risultati = futures::future::join_all(lavori).await;
+    if !anche_senza_rete && !risultati.is_empty() && risultati.iter().all(|(_, r)| matches!(r, Err((true, _)))) {
+        return Err(AppError::msg(RETE_NON_PRONTA));
+    }
+    for (email, r) in risultati {
         match r {
             Ok((c, a, m)) => {
                 calendario.push_str(&format!("{c}\n"));
                 attivita.push_str(&format!("{a}\n"));
                 posta.push_str(&format!("{m}\n"));
             }
-            Err(e) => parti.push(format!("Nota: {e} ({email}).")),
+            Err((_, e)) => parti.push(format!("Nota: {e} ({email}).")),
         }
     }
     if accounts.is_empty() {

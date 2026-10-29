@@ -56,7 +56,7 @@ pub fn crea_tray(app: &AppHandle) -> tauri::Result<()> {
             "briefing" => {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    match crate::briefing::esegui(&app).await {
+                    match crate::briefing::esegui(&app, true).await {
                         Ok(r) => {
                             crate::mostra_principale(&app);
                             let _ = app.emit("open-run", json!({ "runId": r.id, "conversationId": r.conversation_id, "agentId": r.agent_id }));

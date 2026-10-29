@@ -22,6 +22,11 @@ impl AppError {
     pub fn msg(s: impl Into<String>) -> Self {
         AppError::Msg(s.into())
     }
+
+    /// Errore di rete passeggero (Wi-Fi non ancora pronto dopo il risveglio, server irraggiungibile).
+    pub fn e_rete(&self) -> bool {
+        matches!(self, AppError::Http(e) if e.is_connect() || e.is_timeout() || e.is_request())
+    }
 }
 
 // Il frontend riceve sempre una stringa leggibile

@@ -451,7 +451,7 @@ async fn slack_token_set(token: String) -> Result<String> {
 
 #[tauri::command]
 async fn briefing_now(handle: AppHandle) -> Result<RunView> {
-    briefing::esegui(&handle).await
+    briefing::esegui(&handle, true).await
 }
 
 #[tauri::command]

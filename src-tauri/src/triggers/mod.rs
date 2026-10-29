@@ -69,6 +69,7 @@ pub fn avvia(app: AppHandle) {
         // Ultimo controllo per ogni trigger a orario: si eseguono le scadenze passate da allora
         let mut ultimo: HashMap<String, chrono::DateTime<Local>> = HashMap::new();
         let partenza = Local::now();
+        let mut senza_rete_da: Option<chrono::DateTime<Local>> = None;
         loop {
             let st = app.state::<App>();
             let s = st.store.settings();
@@ -80,10 +81,18 @@ pub fn avvia(app: AppHandle) {
                 let oggi = ora.format("%Y-%m-%d").to_string();
                 let fatto = st.store.pref("briefing:ultimo").and_then(|v| v["date"].as_str().map(str::to_string)).is_some_and(|d| d == oggi);
                 if !fatto && ora.time() >= orario && ora.hour() < 13 {
-                    if let Err(e) = crate::briefing::esegui(&app).await {
-                        let _ = app.emit("voice-error", format!("Briefing non riuscito: {e}"));
-                        // Si segna comunque, per non riprovare ogni 30 secondi
-                        let _ = st.store.set_pref("briefing:ultimo", serde_json::json!({ "date": oggi, "error": e.to_string() }));
+                    // Appena acceso o risvegliato il Wi-Fi può non essere pronto: si aspetta la rete fino a 15 minuti
+                    let attesa = *senza_rete_da.get_or_insert(ora);
+                    let anche_senza_rete = ora - attesa >= chrono::Duration::minutes(15);
+                    match crate::briefing::esegui(&app, anche_senza_rete).await {
+                        Ok(_) => senza_rete_da = None,
+                        Err(e) if e.to_string() == crate::briefing::RETE_NON_PRONTA => {}
+                        Err(e) => {
+                            senza_rete_da = None;
+                            let _ = app.emit("voice-error", format!("Briefing non riuscito: {e}"));
+                            // Si segna comunque, per non riprovare ogni 30 secondi
+                            let _ = st.store.set_pref("briefing:ultimo", serde_json::json!({ "date": oggi, "error": e.to_string() }));
+                        }
                     }
                 }
             }
