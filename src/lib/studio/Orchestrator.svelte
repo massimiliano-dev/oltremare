@@ -10,6 +10,7 @@
   import ToolGlyph, { toolKind, TOOL_LABEL } from "./ToolGlyph.svelte";
   import FileIcon from "../dev/FileIcon.svelte";
   import { api, type DevItem } from "../api";
+  import { copia } from "../clipboard";
   import { getContext } from "svelte";
   import type { Workspace as WS } from "../state/workspace.svelte";
 
@@ -159,7 +160,10 @@
     {/if}
     {#each blocks as b (b.start)}
       {#if b.kind === "user"}
-        <div class="u">{b.items[0].text}</div>
+        <div class="u">
+          {b.items[0].text}
+          <button class="cp" onclick={() => copia(b.items[0].text ?? "")} title="Copia il messaggio" aria-label="Copia il messaggio"><Icon name="copy" size={12} /></button>
+        </div>
       {:else if b.kind === "text"}
         <div class="md a">{@html markdown(b.items[0].text ?? "")}</div>
       {:else}
@@ -418,6 +422,7 @@
     padding-left: 18px;
   }
   .u {
+    position: relative;
     align-self: flex-end;
     max-width: 90%;
     padding: 9px 12px;
@@ -425,6 +430,31 @@
     background: linear-gradient(135deg, color-mix(in oklch, var(--accent) 16%, var(--paper)), color-mix(in oklch, var(--accent) 9%, var(--paper)));
     white-space: pre-wrap;
     font-size: var(--t-sm);
+    user-select: text;
+    -webkit-user-select: text;
+    overflow-wrap: anywhere;
+  }
+  .cp {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    color: var(--ink-3);
+    background: var(--paper);
+    box-shadow: 0 1px 3px oklch(0.3 0.05 var(--tint-h) / 0.18), inset 0 0 0 1px var(--rule-soft);
+    opacity: 0;
+    transition: opacity 0.12s, color 0.12s;
+  }
+  .u:hover .cp,
+  .cp:focus-visible {
+    opacity: 1;
+  }
+  .cp:hover {
+    color: var(--accent);
   }
   .a {
     font-size: var(--t-sm);

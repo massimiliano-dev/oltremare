@@ -901,6 +901,7 @@ pub fn run() {
             settings_get,
             settings_save,
             memoria::memory_info,
+            tools::appunti::clipboard_write,
             terminale::term_open,
             terminale::term_write,
             terminale::term_resize,

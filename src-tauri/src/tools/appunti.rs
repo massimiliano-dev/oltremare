@@ -26,3 +26,10 @@ pub fn esegui(nome: &str, input: &Value) -> Esito {
         _ => Esito::errore("strumento sconosciuto"),
     }
 }
+
+/// Copia negli appunti dall'interfaccia (i messaggi della chat).
+#[tauri::command]
+pub fn clipboard_write(text: String) -> crate::error::Result<()> {
+    let mut cb = arboard::Clipboard::new().map_err(|e| crate::error::AppError::msg(format!("Appunti non disponibili: {e}")))?;
+    cb.set_text(text).map_err(|e| crate::error::AppError::msg(e.to_string()))
+}

@@ -10,6 +10,7 @@
   import { settings, providerLabel, modelLabel } from "../state/settings.svelte";
   import { avatar } from "../state/avatar.svelte";
   import { ui } from "../state/ui.svelte";
+  import { copia } from "../clipboard";
   import type { Run } from "../api";
   import { fileIcon, fileExt } from "../chat/files";
   import ToolCard from "../run/ToolCard.svelte";
@@ -128,6 +129,7 @@
             <div class="q">
               {#if r.steps.find((s) => s.kind === "user")?.viaVoice}<Icon name="mic" size={13} />{/if}
               <p>{userText(r)}</p>
+              <button class="cp" onclick={() => copia(userText(r))} title="Copia il messaggio" aria-label="Copia il messaggio"><Icon name="copy" size={13} /></button>
             </div>
             <div class="a" class:selected={runs.selectedRunId === r.id}>
               {#if a}<span class="who"><AgentDisc icon={a.icon} hue={a.hue} size={24} /></span>{/if}
@@ -325,9 +327,34 @@
     box-shadow: inset 0 0 0 1px var(--accent-wash);
     color: var(--ink);
   }
-  .q :global(svg) {
+  .q {
+    position: relative;
+  }
+  .q > :global(svg) {
     flex: none;
     margin-top: 4px;
+    color: var(--accent);
+  }
+  .q .cp {
+    position: absolute;
+    top: -9px;
+    left: -9px;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    color: var(--ink-3);
+    background: var(--paper);
+    box-shadow: 0 1px 3px oklch(0.3 0.05 var(--tint-h) / 0.18), inset 0 0 0 1px var(--rule-soft);
+    opacity: 0;
+    transition: opacity 0.12s, color 0.12s;
+  }
+  .q:hover .cp,
+  .q .cp:focus-visible {
+    opacity: 1;
+  }
+  .q .cp:hover {
     color: var(--accent);
   }
   .q p {
