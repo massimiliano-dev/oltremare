@@ -13,6 +13,8 @@ use tokio_util::sync::CancellationToken;
 /// Comandi che Claude Code può eseguire da solo mentre sviluppa (le modifiche ai file sono già consentite).
 const CONSENTITI: &[&str] = &[
     "Read", "Glob", "Grep", "Edit", "Write", "MultiEdit", "NotebookEdit", "TodoWrite", "WebFetch", "WebSearch",
+    // Sotto-agenti: lavorano in parallelo nella stessa sessione, l'agente principale coordina e verifica
+    "Agent", "Task",
     "Bash(npm run:*)", "Bash(npm test:*)", "Bash(npm install:*)", "Bash(npm ci:*)", "Bash(npx:*)", "Bash(pnpm:*)", "Bash(yarn:*)", "Bash(bun:*)",
     "Bash(node:*)", "Bash(tsc:*)", "Bash(cargo:*)", "Bash(go:*)", "Bash(python3:*)", "Bash(pytest:*)", "Bash(dotnet:*)", "Bash(swift:*)", "Bash(xcodebuild:*)",
     "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git add:*)", "Bash(git commit:*)", "Bash(git checkout:*)",
@@ -89,7 +91,7 @@ pub struct Opzioni {
 
 /// Strumenti per chi deve solo leggere e verificare (il CTO che rivede, un secondo parere)
 const SOLO_LETTURA: &[&str] = &[
-    "Read", "Glob", "Grep", "WebFetch", "WebSearch", "TodoWrite",
+    "Read", "Glob", "Grep", "WebFetch", "WebSearch", "TodoWrite", "Agent", "Task",
     "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)",
     "Bash(npm test:*)", "Bash(npm run test:*)", "Bash(npm run lint:*)", "Bash(npm run check:*)", "Bash(npm run build:*)", "Bash(npx vitest:*)", "Bash(npx jest:*)", "Bash(npx tsc:*)", "Bash(npx eslint:*)", "Bash(npx svelte-check:*)",
     "Bash(cargo test:*)", "Bash(cargo check:*)", "Bash(cargo clippy:*)", "Bash(go test:*)", "Bash(go vet:*)", "Bash(pytest:*)", "Bash(python3 -m pytest:*)", "Bash(dotnet test:*)", "Bash(swift test:*)",
