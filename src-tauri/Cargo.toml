@@ -71,6 +71,7 @@ trash = "5"
 arboard = "3"
 # Server MCP locale per gli strumenti con Claude Code
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+portable-pty = "0.9"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

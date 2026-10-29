@@ -304,6 +304,8 @@ export function installPreview() {
         case "memory_info":
           return { enabled: true, path: "/Users/demo/Desktop/Obsidian", ready: true, notes: 23, obsidian: true, projectNote: a.project ? "/Users/demo/Desktop/Obsidian/Progetti/negozio.md" : null, suggested: null };
         case "memory_open": return null;
+        case "term_open": return "t1";
+        case "term_write": case "term_resize": case "term_close": return null;
         case "git_state": {
           const B = "/Users/demo/Sviluppo/negozio/";
           return { repo: true, branch: "feature/NEG-12-sconti", upstream: "origin/feature/NEG-12-sconti", ahead: 2, behind: 1, stash: 1, last: "a1b2c3d Carrello: righe e totale",

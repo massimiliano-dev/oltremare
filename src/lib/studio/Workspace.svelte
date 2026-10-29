@@ -7,6 +7,7 @@
   import IssuesPanel from "./IssuesPanel.svelte";
   import SourceControl from "./SourceControl.svelte";
   import DiffViewer from "./DiffViewer.svelte";
+  import Terminal from "./Terminal.svelte";
   import { git } from "../state/git.svelte";
   import { dev } from "../state/dev.svelte";
   import { studio } from "../state/studio.svelte";
@@ -68,8 +69,49 @@
     e.preventDefault();
     imposta(k, (k === "left" ? left : right) + (k === "left" ? verso : -verso) * passo);
   }
-  const proc = $derived(dev.processes.find((p) => p.id === dev.bottom) ?? dev.processes[0] ?? null);
+  // Terminali del progetto (la shell dell'utente) accanto ai processi avviati dall'orchestratore
+  let terms = $state<{ id: number; name: string; ended: boolean }[]>([]);
+  let termN = 0;
+  const termSel = $derived(dev.bottom?.startsWith("term:") ? Number(dev.bottom.slice(5)) : null);
+  const proc = $derived(termSel != null ? null : (dev.processes.find((p) => p.id === dev.bottom) ?? dev.processes[0] ?? null));
+
+  function nuovoTerminale() {
+    const id = ++termN;
+    terms = [...terms, { id, name: terms.length ? `Terminale ${id}` : "Terminale", ended: false }];
+    dev.bottom = `term:${id}`;
+    bottomOpen = true;
+  }
+
+  function chiudiTerminale(id: number) {
+    terms = terms.filter((t) => t.id !== id);
+    if (termSel === id) dev.bottom = terms.at(-1) ? `term:${terms.at(-1)!.id}` : null;
+  }
+
+  // ⌃` mostra o nasconde il terminale, come negli editor
+  function tasto(e: KeyboardEvent) {
+    if (e.ctrlKey && e.key === "`") {
+      e.preventDefault();
+      if (!terms.length) nuovoTerminale();
+      else if (termSel != null && bottomOpen) bottomOpen = false;
+      else {
+        dev.bottom = `term:${(terms.find((t) => t.id === termSel) ?? terms.at(-1))!.id}`;
+        bottomOpen = true;
+      }
+    }
+  }
+
+  // Cambiando progetto i terminali del progetto precedente si chiudono
+  let progettoTerm = "";
+  $effect(() => {
+    const p = studio.project?.path ?? "";
+    if (p !== progettoTerm) {
+      progettoTerm = p;
+      terms = [];
+    }
+  });
 </script>
+
+<svelte:window onkeydown={tasto} />
 
 <div class="ws" bind:this={ws} class:dragging style="--left:{left}px; --right:{right}px">
   <!-- Separatore che si sposta (ruolo ARIA «separator» con valore): è un controllo, si può mettere a fuoco -->
@@ -94,6 +136,8 @@
       {/each}
       <div class="tab" class:on={dev.tab === "diff"}><button class="tname" onclick={() => git.showDiff(git.diffFile, git.diffStaged)}><Icon name="layers" size={12} /> Differenze{#if git.changed.length + git.staged.length}<span class="tcount">{git.changed.length + git.staged.length}</span>{/if}</button></div>
       <div class="tab" class:on={dev.tab === "preview"}><button class="tname" onclick={() => (dev.tab = "preview")}><Icon name="globe" size={12} /> Anteprima{dev.urls.length ? ` · ${dev.urls.length}` : ""}</button></div>
+      <span class="tsp"></span>
+      <button class="tterm" onclick={() => (terms.length ? (dev.bottom = `term:${(terms.find((t) => t.id === termSel) ?? terms.at(-1))!.id}`, (bottomOpen = true)) : nuovoTerminale())} title="Terminale nella cartella del progetto (⌃`)"><Icon name="terminal" size={13} /> Terminale</button>
     </div>
     <div class="pane">
       {#if dev.tab === "file"}
@@ -125,17 +169,31 @@
         {/if}
       {/if}
     </div>
-    {#if dev.processes.length}
-      <div class="bottom">
+    {#if dev.processes.length || terms.length}
+      <div class="bottom" class:open={bottomOpen && (termSel != null || proc)} class:isterm={termSel != null}>
         <div class="btabs">
           <button class="btoggle" onclick={() => (bottomOpen = !bottomOpen)} aria-label="Mostra o nascondi"><Icon name={bottomOpen ? "down" : "chevron"} size={12} /></button>
           {#each dev.processes as p (p.id)}
-            <button class:on={proc?.id === p.id} onclick={() => { dev.bottom = p.id; bottomOpen = true; }}>
+            <button class="bt" class:on={proc?.id === p.id} onclick={() => { dev.bottom = p.id; bottomOpen = true; }}>
               <span class="led" class:run={p.running} class:bad={!p.running && p.exitCode !== 0}></span>{p.name}
             </button>
           {/each}
+          {#each terms as t (t.id)}
+            <span class="bt tt" class:on={termSel === t.id}>
+              <button class="ttn" onclick={() => { dev.bottom = `term:${t.id}`; bottomOpen = true; }}><Icon name="terminal" size={11} />{t.name}{#if t.ended}<em> · chiuso</em>{/if}</button>
+              <button class="ttx" onclick={() => chiudiTerminale(t.id)} aria-label="Chiudi {t.name}" title="Chiudi (ferma quello che ci gira)"><Icon name="x" size={10} /></button>
+            </span>
+          {/each}
+          <button class="btoggle" onclick={nuovoTerminale} title="Nuovo terminale (⌃`)" aria-label="Nuovo terminale"><Icon name="plus" size={13} /></button>
         </div>
         {#if bottomOpen && proc}<pre class="log">{proc.log || "(nessun output)"}</pre>{/if}
+        {#if studio.project}
+          {#each terms as t (t.id)}
+            <div class="tpane" hidden={!bottomOpen || termSel !== t.id}>
+              <Terminal project={studio.project.path} active={bottomOpen && termSel === t.id} onexit={() => (t.ended = true)} />
+            </div>
+          {/each}
+        {/if}
       </div>
     {/if}
   </section>
@@ -333,7 +391,62 @@
     height: 22px;
     color: var(--ink-3);
   }
-  .btabs button:not(.btoggle) {
+  .tsp {
+    flex: 1;
+  }
+  .tterm {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin: 0 6px;
+    padding: 0 9px;
+    height: 26px;
+    align-self: center;
+    border-radius: 7px;
+    font-size: var(--t-xs);
+    font-weight: 600;
+    color: var(--ink-3);
+  }
+  .tterm:hover {
+    color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 9%, transparent);
+  }
+  .tpane {
+    height: 260px;
+    border-top: 1px solid var(--rule-soft);
+  }
+  .tt {
+    display: flex;
+    align-items: center;
+    padding: 0 !important;
+    overflow: hidden;
+  }
+  .ttn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 4px 3px 9px;
+    font-size: var(--t-xs);
+  }
+  .ttn em {
+    font-style: normal;
+    color: var(--ink-3);
+  }
+  .ttx {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    margin-right: 3px;
+    border-radius: 50%;
+    color: var(--ink-3);
+  }
+  .ttx:hover {
+    color: var(--danger);
+    background: var(--danger-wash);
+  }
+  .btabs .bt {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -342,7 +455,7 @@
     font-size: var(--t-xs);
     box-shadow: inset 0 0 0 1px var(--rule);
   }
-  .btabs button.on {
+  .btabs .bt.on {
     box-shadow: inset 0 0 0 1.5px var(--accent);
     color: var(--accent);
   }

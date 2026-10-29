@@ -20,6 +20,7 @@ mod shell_env;
 mod sidecar;
 mod store;
 mod studio;
+mod terminale;
 mod tools;
 mod triggers;
 mod voce;
@@ -900,6 +901,10 @@ pub fn run() {
             settings_get,
             settings_save,
             memoria::memory_info,
+            terminale::term_open,
+            terminale::term_write,
+            terminale::term_resize,
+            terminale::term_close,
             memoria::memory_open,
             provider_key_set,
             provider_models,
@@ -1035,6 +1040,7 @@ pub fn run() {
                     st.sidecar.ferma_subito();
                     tools::processi::ferma_tutti();
                     tools::sviluppo::ferma_tutti_headless();
+                    terminale::chiudi_tutti();
                     st.runs.annulla_tutte();
                 }
             }

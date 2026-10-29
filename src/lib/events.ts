@@ -43,6 +43,8 @@ export interface EventMap {
   "palette-open": { agentId: string | null };
   "dev-project": { folder: string };
   "dev-session": { folder: string; done: boolean };
+  "term-data": { id: string; data: string };
+  "term-exit": { id: string; code: number | null };
   "studio-open": { project: string | null; prompt: string | null };
 }
 
