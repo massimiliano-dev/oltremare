@@ -146,6 +146,11 @@ export class Workspace {
   }
 
   async refreshTeam() {
+    // Conversazione nuova: niente squadra finché non parte la prima richiesta
+    if (this.fresh) {
+      this.team = null;
+      return;
+    }
     const prima = this.activeAgents;
     this.team = await api.studioTeam(this.path, this.dev.sessionId ?? this.dev.session?.id).catch(() => null);
     // Appena il senior divide il lavoro, se non stai guardando un file, la Squadra si apre da sola

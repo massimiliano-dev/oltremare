@@ -131,6 +131,11 @@ pub fn leggi_squadra(file: &Path, attivo: bool) -> Result<Value> {
                 for b in v["message"]["content"].as_array().into_iter().flatten().filter(|b| b["type"] == "tool_result") {
                     if let Some(&i) = b["tool_use_id"].as_str().and_then(|id| indice.get(id)) {
                         let (testo, token, durata) = rapporto(&b["content"]);
+                        // Lanciato in background: la risposta immediata è solo un avviso tecnico, il rapporto arriva dal suo transcript
+                        if testo.trim_start().starts_with("Async agent launched") {
+                            agenti[i]["background"] = json!(true);
+                            continue;
+                        }
                         agenti[i]["report"] = json!(breve(&testo, 2500));
                         agenti[i]["endedAt"] = json!(quando(&v));
                         agenti[i]["running"] = json!(false);
@@ -159,28 +164,45 @@ pub fn leggi_squadra(file: &Path, attivo: bool) -> Result<Value> {
                 let mut passi: Vec<Value> = vec![];
                 let mut ultimo_testo = String::new();
                 let mut ultimo = 0;
+                // L'ultimo messaggio è solo testo (nessuno strumento): il sotto-agente ha concluso con il rapporto
+                let mut chiuso_con_testo = false;
                 for riga in s.lines() {
                     let Ok(v) = serde_json::from_str::<Value>(riga) else { continue };
                     if v["type"] != "assistant" {
                         continue;
                     }
                     ultimo = quando(&v).max(ultimo);
+                    let mut usa_strumenti = false;
                     for b in v["message"]["content"].as_array().into_iter().flatten() {
                         match b["type"].as_str() {
-                            Some("tool_use") => passi.push(json!({ "tool": b["name"].as_str().unwrap_or("").replace("mcp__", "").replace("__", " · "), "title": sviluppo::titolo_breve(&b["input"]) })),
+                            Some("tool_use") => {
+                                usa_strumenti = true;
+                                passi.push(json!({ "tool": b["name"].as_str().unwrap_or("").replace("mcp__", "").replace("__", " · "), "title": sviluppo::titolo_breve(&b["input"]) }));
+                            }
                             Some("text") => ultimo_testo = b["text"].as_str().unwrap_or("").to_string(),
                             _ => {}
                         }
                     }
+                    chiuso_con_testo = !usa_strumenti && !ultimo_testo.trim().is_empty();
                 }
                 agenti[i]["toolUses"] = json!(passi.len());
                 let salta = passi.len().saturating_sub(8);
                 agenti[i]["steps"] = json!(passi.into_iter().skip(salta).collect::<Vec<_>>());
                 agenti[i]["lastAt"] = json!(ultimo);
-                if agenti[i]["report"].as_str().unwrap_or("").is_empty() && !ultimo_testo.trim().is_empty() {
+                let in_background = agenti[i]["background"].as_bool() == Some(true);
+                if in_background && (chiuso_con_testo || !attivo) {
+                    agenti[i]["running"] = json!(false);
+                    agenti[i]["endedAt"] = json!(ultimo);
+                    agenti[i]["report"] = json!(breve(&ultimo_testo, 2500));
+                } else if agenti[i]["report"].as_str().unwrap_or("").is_empty() && !ultimo_testo.trim().is_empty() {
                     agenti[i]["progress"] = json!(breve(&ultimo_testo, 300));
                 }
             }
+        }
+    }
+    if !attivo {
+        for a in agenti.iter_mut() {
+            a["running"] = json!(false);
         }
     }
     Ok(json!({ "session": file.file_stem().map(|s| s.to_string_lossy().into_owned()), "agents": agenti, "running": attivo }))
