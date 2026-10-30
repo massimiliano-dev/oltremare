@@ -59,6 +59,34 @@ pub fn ultima_conversazione(cartella: &Path) -> Option<String> {
     sessioni(cartella).into_iter().map(|(f, _)| f).find(|f| !e_revisione(f)).and_then(|f| f.file_stem().map(|s| s.to_string_lossy().into_owned()))
 }
 
+/// Le modifiche non committate per intero (diff dei tracciati più i file nuovi), entro un tetto di caratteri.
+pub async fn git_diff_completo(cartella: &Path, max: usize) -> String {
+    let esegui = |args: &[&str]| {
+        let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+        let dir = cartella.to_path_buf();
+        async move {
+            tokio::process::Command::new("git").args(&args).current_dir(&dir).env("PATH", crate::shell_env::path_utente()).output().await.ok().filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default()
+        }
+    };
+    let mut out = esegui(&["diff", "--no-color", "--no-ext-diff", "-U3", "HEAD"]).await;
+    let nuovi = esegui(&["ls-files", "--others", "--exclude-standard"]).await;
+    for f in nuovi.lines().take(30) {
+        if let Ok(t) = std::fs::read_to_string(cartella.join(f)) {
+            if t.chars().count() < 40_000 {
+                out.push_str(&format!("\n\n=== File nuovo: {f} ===\n{t}"));
+            } else {
+                out.push_str(&format!("\n\n=== File nuovo: {f} ({} caratteri, leggilo se serve) ===", t.chars().count()));
+            }
+        }
+    }
+    if out.chars().count() > max {
+        let mut t: String = out.chars().take(max).collect();
+        t.push_str("\n\n[… diff troncato: il resto leggilo con git diff se serve]");
+        return t;
+    }
+    out
+}
+
 async fn git_modifiche(cartella: &Path) -> String {
     let o = tokio::process::Command::new("git").args(["status", "--short"]).current_dir(cartella).env("PATH", crate::shell_env::path_utente()).output().await;
     match o {
@@ -111,6 +139,8 @@ pub struct Opzioni {
     pub cartelle: Vec<PathBuf>,
     /// Solo lettura (revisioni, pareri): niente modifiche ai file né comandi che cambiano lo stato
     pub solo_lettura: bool,
+    /// Tetto ai turni (piani e revisioni devono restare rapidi)
+    pub max_turns: Option<u32>,
 }
 
 /// Strumenti per chi deve solo leggere e verificare (il CTO che rivede, un secondo parere)
@@ -163,6 +193,9 @@ pub(crate) fn comando_headless_con(bin: &Path, cartella: &Path, messaggio: &str,
     }
     for c in &o.cartelle {
         cmd.arg("--add-dir").arg(c);
+    }
+    if let Some(n) = o.max_turns {
+        cmd.args(["--max-turns", &n.to_string()]);
     }
     if let Some(sid) = sessione {
         cmd.args(["--resume", sid]);

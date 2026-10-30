@@ -146,6 +146,17 @@ async fn provider_test(app: State<'_, App>, provider: String) -> Result<Provider
 
 // ---------- Preferenze dell'interfaccia ----------
 
+/// Apre un file o una cartella con l'app predefinita (anteprime in chat, allegati).
+#[tauri::command]
+fn apri_file_ui(handle: AppHandle, path: String) -> Result<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let p = tools::percorsi::espandi(&path);
+    if !p.exists() {
+        return Err(AppError::msg(format!("Non trovo {}", p.display())));
+    }
+    handle.opener().open_path(p.to_string_lossy(), None::<&str>).map_err(|e| AppError::msg(e.to_string()))
+}
+
 #[tauri::command]
 fn prefs_get(app: State<'_, App>, key: String) -> Option<Value> {
     app.store.pref(&key)
@@ -902,7 +913,11 @@ pub fn run() {
             settings_get,
             settings_save,
             memoria::memory_info,
+            memoria::memory_graph,
+            memoria::memory_read,
             tools::appunti::clipboard_write,
+            tools::fs::image_thumb,
+            apri_file_ui,
             terminale::term_open,
             terminale::term_write,
             terminale::term_resize,

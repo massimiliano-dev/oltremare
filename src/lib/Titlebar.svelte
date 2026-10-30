@@ -31,6 +31,7 @@
         <span class="spin"></span> Al lavoro · Ferma
       </button>
     {/if}
+    <button class="icon-btn" class:on={ui.view === "memory"} onclick={() => (ui.view = ui.view === "memory" ? "chat" : "memory")} title="Memoria: le note degli agenti come grafo (⌘⇧M)" aria-label="Memoria"><Icon name="book" size={17} /></button>
     <button class="icon-btn" onclick={() => api.studioOpen()} title="Oltremare Studio: la modalità sviluppo (⌘⇧D)" aria-label="Studio"><Icon name="terminal" size={17} /></button>
     <button class="icon-btn" onclick={() => (ui.showPalette = true)} title="Comandi (⌘K)" aria-label="Comandi"><Icon name="command" size={17} /></button>
     <button class="icon-btn" onclick={() => ui.openSettings()} title="Impostazioni (⌘,)" aria-label="Impostazioni"><Icon name="settings" size={17} /></button>

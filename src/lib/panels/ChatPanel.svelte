@@ -11,6 +11,7 @@
   import { avatar } from "../state/avatar.svelte";
   import { ui } from "../state/ui.svelte";
   import { copia } from "../clipboard";
+  import FileMentions from "../chat/FileMentions.svelte";
   import type { Run } from "../api";
   import { fileIcon, fileExt } from "../chat/files";
   import ToolCard from "../run/ToolCard.svelte";
@@ -163,6 +164,7 @@
                     {#if openThinking[s.id]}<div class="think-text md">{@html markdown(s.text)}</div>{/if}
                   {:else if s.kind === "text"}
                     <div class="md" class:streaming={r.status === "running" && i === r.steps.length - 1}>{@html markdown(s.text)}</div>
+                    {#if r.status !== "running"}<FileMentions text={s.text} />{/if}
                   {:else if s.kind === "notice"}
                     <p class="notice"><Icon name="info" size={13} /> {s.text}</p>
                   {:else if s.kind === "tool"}

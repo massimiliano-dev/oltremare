@@ -340,3 +340,24 @@ mod tests {
         assert!(sum.starts_with("Modifica") && diff.unwrap().contains("+nuovo"));
     }
 }
+
+/// Miniatura di un'immagine (PNG in base64) per le anteprime in chat: solo file dell'utente, ridotti a `max` px.
+#[tauri::command]
+pub async fn image_thumb(path: String, max: Option<u32>) -> crate::error::Result<String> {
+    let p = super::percorsi::espandi(&path);
+    let home = crate::shell_env::home().unwrap_or_default();
+    if !(p.starts_with(&home) || p.starts_with("/tmp") || p.starts_with("/private/tmp")) {
+        return Err(crate::error::AppError::msg("Percorso non consentito"));
+    }
+    let max = max.unwrap_or(480).clamp(64, 2400);
+    tokio::task::spawn_blocking(move || {
+        let img = image::open(&p).map_err(|e| crate::error::AppError::msg(format!("Immagine non leggibile: {e}")))?;
+        let img = if img.width() > max || img.height() > max { img.thumbnail(max, max) } else { img };
+        let mut buf = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut buf, image::ImageFormat::Png).map_err(|e| crate::error::AppError::msg(e.to_string()))?;
+        use base64::Engine;
+        Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(buf.into_inner())))
+    })
+    .await
+    .map_err(|e| crate::error::AppError::msg(e.to_string()))?
+}

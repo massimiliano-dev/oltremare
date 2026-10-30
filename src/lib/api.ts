@@ -226,6 +226,20 @@ export interface TeamInfo {
   agents: TeamAgent[];
 }
 
+export interface MemoryGraph {
+  nodes: { id: string; title: string; folder: string; size: number; updated: string | null; missing?: boolean }[];
+  edges: { from: string; to: string }[];
+}
+
+export interface MemoryNote {
+  nota: string;
+  percorso: string;
+  fullPath: string;
+  testo: string;
+  collegamenti: string[];
+  citata_da: string[];
+}
+
 export interface AgentDef {
   name: string;
   description: string;
@@ -624,8 +638,8 @@ export const api = {
   studioAgents: (project: string) => invoke<AgentDef[]>("studio_agents", { project }),
   studioReview: (project: string, text: string, model: string, profile?: string) => invoke<{ session: string }>("studio_review", { project, text, model, profile }),
   studioReviewResult: (project: string, session: string) => invoke<StudioReview>("studio_review_result", { project, session }),
-  studioRun: (project: string, text: string, model: string, plan: boolean, profile?: string, session?: string, newSession?: boolean) =>
-    invoke<{ session: string; plan: boolean }>("studio_run", { project, text, model, plan, profile, session, newSession }),
+  studioRun: (project: string, text: string, model: string, plan: boolean, profile?: string, session?: string, newSession?: boolean, attachments?: string[]) =>
+    invoke<{ session: string; plan: boolean }>("studio_run", { project, text, model, plan, profile, session, newSession, attachments }),
   studioPlan: (project: string, session: string) => invoke<{ plan: string }>("studio_plan", { project, session }),
   studioApprove: (project: string, session: string, model: string, profile?: string, notes?: string) => invoke<{ session: string }>("studio_approve", { project, session, model, profile, notes }),
   studioSecondOpinion: (project: string, profile: string, about: "plan" | "diff", plan?: string) => invoke<string>("studio_second_opinion", { project, profile, about, plan }),
@@ -641,6 +655,10 @@ export const api = {
   memoryInfo: (project?: string) => invoke<MemoryInfo>("memory_info", { project }),
   memoryOpen: (path?: string) => invoke<void>("memory_open", { path }),
   memorySeed: () => invoke<number>("memory_seed"),
+  memoryGraph: () => invoke<MemoryGraph>("memory_graph"),
+  memoryRead: (note: string) => invoke<MemoryNote>("memory_read", { note }),
+  imageThumb: (path: string, max?: number) => invoke<string>("image_thumb", { path, max }),
+  openPath: (path: string) => invoke<void>("apri_file_ui", { path }),
   gitState: (project: string) => invoke<GitState>("git_state", { project }),
   gitDiff: (project: string, staged: boolean, file?: string) => invoke<string>("git_diff", { project, file, staged }),
   gitStage: (project: string, files: string[]) => invoke<void>("git_stage", { project, files }),

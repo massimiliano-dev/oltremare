@@ -24,6 +24,8 @@
   import { layout } from "./lib/state/layout.svelte";
   import Gutter from "./lib/Gutter.svelte";
   import DevView from "./lib/dev/DevView.svelte";
+  import Icon from "./lib/Icon.svelte";
+  import MemoryGraph from "./lib/memory/MemoryGraph.svelte";
   import { dev } from "./lib/state/dev.svelte";
   import { on } from "./lib/events";
   import { errorText, api } from "./lib/api";
@@ -128,6 +130,11 @@
       api.studioOpen().catch(() => {});
       return;
     }
+    if (mod && e.shiftKey && k === "m") {
+      e.preventDefault();
+      ui.view = ui.view === "memory" ? "chat" : "memory";
+      return;
+    }
     if (mod && k === "b") {
       e.preventDefault();
       layout.toggle("agents");
@@ -163,6 +170,15 @@
   <Titlebar />
   {#if ui.view === "dev"}
     <DevView />
+  {:else if ui.view === "memory"}
+    <section class="memview">
+      <header class="memhead">
+        <button class="btn btn-line sm" onclick={() => (ui.view = "chat")} title="Torna alla chat"><Icon name="left" size={13} /> Chat</button>
+        <h2>Memoria</h2>
+        <span class="memhint">Le note degli agenti, collegate tra loro. Clicca una nota per leggerla; ⌘⇧M per tornare qui.</span>
+      </header>
+      <MemoryGraph />
+    </section>
   {:else}
   <main class="grid" class:ready style="grid-template-columns: {layout.cols.map((c, i) => (i ? 'auto ' : '') + (c.kind === 'chat' ? 'minmax(0, 1fr)' : `${layout.width(c.kind)}px`)).join(' ')}">
     {#each layout.cols as c, i (c.kind)}
@@ -196,6 +212,36 @@
 </div>
 
 <style>
+  .memview {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .memhead {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--rule-soft);
+    background: var(--paper-2);
+  }
+  .memhead h2 {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: 1.3rem;
+  }
+  .memhint {
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+  }
+  .memhead .sm {
+    height: 28px;
+    padding: 0 10px;
+    font-size: var(--t-xs);
+    gap: 5px;
+  }
   .shell {
     position: relative;
     display: flex;

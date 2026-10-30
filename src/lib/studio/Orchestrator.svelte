@@ -11,6 +11,9 @@
   import FileIcon from "../dev/FileIcon.svelte";
   import { api, type DevItem } from "../api";
   import { copia } from "../clipboard";
+  import FileMentions from "../chat/FileMentions.svelte";
+  import { fileName, fileIcon, fileExt } from "../chat/files";
+  import { onMount } from "svelte";
   import { getContext } from "svelte";
   import type { Workspace as WS } from "../state/workspace.svelte";
 
@@ -21,6 +24,42 @@
   let notes = $state("");
   let opinionProfile = $state("");
   let history = $state(false);
+  let files = $state<string[]>([]);
+  let dragging = $state(false);
+
+  function addFiles(paths: string[]) {
+    files = Array.from(new Set([...files, ...paths])).slice(0, 10);
+  }
+
+  async function pick() {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const r = await open({ multiple: true, title: "Allega file alla richiesta" });
+      if (Array.isArray(r)) addFiles(r.filter((x): x is string => typeof x === "string"));
+      else if (typeof r === "string") addFiles([r]);
+    } catch {}
+  }
+
+  onMount(() => {
+    // Trascina file dal Finder sulla finestra: vanno alla scheda in primo piano
+    let un: (() => void) | undefined;
+    import("@tauri-apps/api/webview")
+      .then(({ getCurrentWebview }) =>
+        getCurrentWebview().onDragDropEvent((e) => {
+          if (studio.tab !== ws) return;
+          const p = e.payload;
+          if (p.type === "over" || p.type === "enter") dragging = true;
+          else if (p.type === "leave") dragging = false;
+          else if (p.type === "drop") {
+            dragging = false;
+            if (p.paths.length) addFiles(p.paths);
+          }
+        }),
+      )
+      .then((f) => (un = f))
+      .catch(() => {});
+    return () => un?.();
+  });
 
   function quando(ms: number) {
     const d = new Date(ms);
@@ -112,15 +151,17 @@
 
   async function send(nuova = false) {
     const t = text.trim();
-    if (!t) return;
+    const f = files;
+    if (!t && !f.length) return;
     text = "";
+    files = [];
     // Claude sta lavorando (o c'è già una coda): il messaggio aspetta il suo turno
     if (ws.busy || ws.queue.length) {
-      ws.enqueue(t);
+      ws.enqueue(t, f);
       ws.drain();
       return;
     }
-    await ws.send(t, nuova);
+    await ws.send(t, nuova, f);
   }
 
   function key(e: KeyboardEvent) {
@@ -205,6 +246,7 @@
         </div>
       {:else if b.kind === "text"}
         <div class="md a">{@html markdown(b.items[0].text ?? "")}</div>
+        <FileMentions text={b.items[0].text ?? ""} root={ws.path} onopen={(p) => (/\.(png|jpe?g|gif|webp|pdf|mp4|mov|zip|xlsx?|docx?|pptx?)$/i.test(p) ? api.openPath(p) : ws.openFile(p))} />
       {:else}
         <ol class="acts" aria-label="{b.items.length} azioni di Claude">
           {#each b.items as it, j (j)}
@@ -335,8 +377,8 @@
         {#each ws.queue as q, i (q.id)}
           <li>
             <span class="qn">{i + 1}</span>
-            <span class="qt" title={q.text}>{q.text}</span>
-            <button class="qa" onclick={() => { ws.unqueue(q.id); text = q.text; }} title="Riporta nel campo per modificarlo" aria-label="Modifica"><Icon name="pen" size={12} /></button>
+            <span class="qt" title={q.text}>{q.text || `${q.files.length} file`}{q.files.length && q.text ? ` · ${q.files.length} file` : ""}</span>
+            <button class="qa" onclick={() => { ws.unqueue(q.id); text = q.text; files = q.files; }} title="Riporta nel campo per modificarlo" aria-label="Modifica"><Icon name="pen" size={12} /></button>
             <button class="qa" onclick={() => ws.sendNow(q.id)} title={running ? "Interrompi il lavoro in corso e invialo subito" : "Invialo subito"} aria-label="Invia subito"><Icon name="bolt" size={12} /></button>
             <button class="qa" onclick={() => ws.unqueue(q.id)} title="Togli dalla coda" aria-label="Togli"><Icon name="x" size={12} /></button>
           </li>
@@ -344,7 +386,22 @@
         <li class="qinfo">{ws.lastTask?.phase === "plan-ready" ? "In attesa: partono dopo che hai approvato il piano e Claude ha finito" : "Partono in ordine appena Claude finisce"}</li>
       </ol>
     {/if}
-    <textarea class="input" rows="3" bind:value={text} onkeydown={key} placeholder={ws.busy ? "Claude sta lavorando: scrivi pure, il messaggio va in coda" : `Cosa facciamo su ${ws.project?.name ?? "questo progetto"}?`}></textarea>
+    {#if files.length}
+      <ul class="files">
+        {#each files as f (f)}
+          <li title={f}>
+            <span class="ext"><Icon name={fileIcon(f)} size={14} /></span>
+            <span class="fname">{fileName(f)}</span>
+            <small>{fileExt(fileName(f))}</small>
+            <button onclick={() => (files = files.filter((x) => x !== f))} aria-label="Togli {fileName(f)}"><Icon name="x" size={12} /></button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    <div class="box" class:dragging>
+      <textarea class="input" rows="3" bind:value={text} onkeydown={key} placeholder={dragging ? "Lascia qui i file" : files.length ? "Cosa devo fare con questi file?" : ws.busy ? "Claude sta lavorando: scrivi pure, il messaggio va in coda" : `Cosa facciamo su ${ws.project?.name ?? "questo progetto"}?`}></textarea>
+      <button class="clip" onclick={pick} title="Allega file (o trascinali qui)" aria-label="Allega file"><Icon name="clip" size={15} /></button>
+    </div>
     <div class="ctl">
       <label title="Modello: Auto lascia scegliere all'orchestratore" style="--h:{MODEL_HUE[ws.modelChoice]}">
         <Icon name="cpu" size={13} />
@@ -364,11 +421,11 @@
           <option value="no">Senza piano</option>
         </select>
       </label>
-      <label title="Revisione dopo ogni lavoro: il CTO (Claude Opus) e, se c'è un'altra AI in Claudex, anche lei. Auto rivede tutto tranne le domande" style="--h:{ws.reviewChoice === 'no' ? 0 : 150}">
+      <label title="Revisione dopo ogni lavoro: Auto = il CTO (Sonnet) rivede tutto tranne le domande; Doppia = dopo il CTO rivede anche la migliore AI di Claudex" style="--h:{ws.reviewChoice === 'no' ? 0 : 150}">
         <Icon name="shield" size={13} />
         <select bind:value={ws.reviewChoice} aria-label="Revisione del CTO">
           <option value="auto">CTO auto</option>
-          <option value="yes">CTO sempre</option>
+          <option value="yes">Doppia revisione</option>
           <option value="no">Senza CTO</option>
         </select>
       </label>
@@ -380,7 +437,7 @@
         </select>
       </label>
       <span class="sp"></span>
-      <button class="btn btn-primary sm" onclick={() => send()} disabled={!text.trim()}>{ws.busy ? "Accoda" : "Invia"}</button>
+      <button class="btn btn-primary sm" onclick={() => send()} disabled={!text.trim() && !files.length}>{ws.busy ? "Accoda" : "Invia"}</button>
     </div>
     {#if studio.claudex && !studio.claudex.installed}
       <small class="hint">Altre AI (Codex, Gemini, Grok, DeepSeek, locali): installa <a href="https://github.com/StringKe/claudex" target="_blank" rel="noreferrer">Claudex</a> e configura i profili; compaiono qui.</small>
@@ -902,6 +959,82 @@
     gap: 8px;
     padding: 10px 12px 12px;
     border-top: 1px solid var(--rule-soft);
+  }
+  .box {
+    position: relative;
+  }
+  .box textarea {
+    width: 100%;
+    padding-right: 38px;
+  }
+  .box.dragging textarea {
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .clip {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    color: var(--ink-3);
+  }
+  .clip:hover {
+    color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 10%, transparent);
+  }
+  .files {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .files li {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    max-width: 260px;
+    height: 30px;
+    padding: 0 4px 0 5px;
+    border-radius: 9px;
+    background: var(--paper-2);
+    box-shadow: inset 0 0 0 1px var(--rule-soft);
+    font-size: var(--t-xs);
+  }
+  .files .ext {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 12%, transparent);
+  }
+  .files .fname {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .files small {
+    font-size: 0.64rem;
+    font-weight: 700;
+    color: var(--ink-3);
+  }
+  .files button {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    color: var(--ink-3);
+  }
+  .files button:hover {
+    color: var(--danger);
+    background: var(--danger-wash);
   }
   .queue {
     list-style: none;

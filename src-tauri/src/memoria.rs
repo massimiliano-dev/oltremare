@@ -349,6 +349,54 @@ pub fn contesto(dir: &Path) -> String {
     out
 }
 
+/// Il grafo della memoria: note (nodi) e collegamenti [[...]] (archi), come la vista a grafo di Obsidian.
+pub fn grafo(dir: &Path) -> Value {
+    let tutte = note(dir);
+    // Titolo (minuscolo) → percorso relativo, per risolvere i collegamenti
+    let per_titolo: std::collections::HashMap<String, String> = tutte.iter().map(|(rel, _)| (titolo_di(rel).to_lowercase(), rel.clone())).collect();
+    let mut nodi: Vec<Value> = vec![];
+    let mut archi: Vec<(String, String)> = vec![];
+    let mut mancanti: std::collections::BTreeSet<String> = Default::default();
+    for (rel, p) in &tutte {
+        let testo = std::fs::read_to_string(p).unwrap_or_default();
+        let cartella = rel.rsplit_once('/').map(|(c, _)| c.to_string()).unwrap_or_default();
+        let aggiornato = testo.lines().take(8).find_map(|l| l.strip_prefix("aggiornato: ")).map(|x| x.trim().to_string());
+        nodi.push(json!({ "id": rel, "title": titolo_di(rel), "folder": cartella, "size": testo.chars().count(), "updated": aggiornato }));
+        for l in collegamenti(&testo) {
+            let chiave = l.to_lowercase();
+            match per_titolo.get(&chiave) {
+                Some(dest) if dest != rel => archi.push((rel.clone(), dest.clone())),
+                Some(_) => {}
+                None => {
+                    mancanti.insert(l.clone());
+                    archi.push((rel.clone(), format!("?{l}")));
+                }
+            }
+        }
+    }
+    for m in mancanti {
+        nodi.push(json!({ "id": format!("?{m}"), "title": m, "folder": "", "size": 0, "updated": null, "missing": true }));
+    }
+    archi.sort();
+    archi.dedup();
+    json!({ "nodes": nodi, "edges": archi.into_iter().map(|(a, b)| json!({ "from": a, "to": b })).collect::<Vec<_>>() })
+}
+
+#[tauri::command]
+pub fn memory_graph(app: tauri::State<'_, crate::App>) -> crate::error::Result<Value> {
+    let dir = cartella(&app.store.settings()).ok_or_else(|| crate::error::AppError::msg("La memoria non è attiva"))?;
+    Ok(grafo(&dir))
+}
+
+/// Una nota per l'interfaccia (per percorso o titolo): testo, collegamenti, chi la cita.
+#[tauri::command]
+pub fn memory_read(app: tauri::State<'_, crate::App>, note: String) -> crate::error::Result<Value> {
+    let dir = cartella(&app.store.settings()).ok_or_else(|| crate::error::AppError::msg("La memoria non è attiva"))?;
+    let mut v = leggi(&dir, &note).map_err(crate::error::AppError::msg)?;
+    v["fullPath"] = json!(dir.join(v["percorso"].as_str().unwrap_or("")).to_string_lossy());
+    Ok(v)
+}
+
 // ---------- Comandi per l'interfaccia ----------
 
 /// Stato della memoria: cartella, quante note, se Obsidian è installato.
@@ -417,6 +465,12 @@ mod prove {
         assert!(c.contains("Com'è fatto") && c.contains("correggi arrotondamento") && !c.contains("creato:"));
         diario(&dir, "Briefing", "Buongiorno.").unwrap();
         assert!(contesto(&dir).contains("[[Anna Bianchi]]"));
+        let g = grafo(&dir);
+        assert!(g["nodes"].as_array().unwrap().iter().any(|n| n["title"] == "Anna Bianchi"));
+        scrivi(&dir, "Luca Verdi", "Lavora con [[Anna Bianchi]] e [[Fornitore Rossi]].", "crea", "Persone").unwrap();
+        let g = grafo(&dir);
+        assert!(g["edges"].as_array().unwrap().iter().any(|e| e["from"] == "Persone/Luca Verdi.md" && e["to"] == "Persone/Anna Bianchi.md"));
+        assert!(g["nodes"].as_array().unwrap().iter().any(|n| n["id"] == "?Fornitore Rossi" && n["missing"] == true), "un collegamento a una nota che non c'è resta come nodo mancante");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

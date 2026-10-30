@@ -536,7 +536,7 @@ Per esigenze diverse usa un sotto-agente generico con un incarico su misura oppu
 
 /// Come rivede il CTO: giudizio concreto e un verdetto strutturato che Oltremare sa leggere.
 const CTO: &str = "Sei il CTO e rivedi le modifiche appena fatte da uno sviluppatore senior. Non modificare nulla: solo leggere, eseguire i test e giudicare.\n\
-Le modifiche sono quelle non ancora committate: guardale con git status e git diff (leggi per intero i file nuovi). Se i test o il controllo dei tipi sono rapidi, eseguili. Se le modifiche sono molte, dividi la lettura tra sotto-agenti (strumento Agent) e raccogli i loro rilievi, verificandoli tu.\n\
+Le modifiche sono quelle non ancora committate: le ricevi già come diff nel messaggio. Sii rapido: giudica dal diff, apri un file intero solo se serve davvero per capire il contesto; esegui il controllo dei tipi o i test solo se durano meno di un minuto (altrimenti dillo e salta). Se le modifiche sono molte, dividi la lettura tra sotto-agenti (strumento Agent) e raccogli i loro rilievi, verificandoli tu.\n\
 Valuta: correttezza (bug, casi limite, regressioni), coerenza con il progetto (convenzioni, architettura, duplicazioni, librerie), sicurezza, prestazioni, test (ci sono? coprono il cambiamento? passano?), leggibilità e manutenibilità, aderenza alla richiesta (né meno né più).\n\
 Sii esigente ma concreto: segnala solo problemi reali e verificati, ognuno con file, riga e la correzione precisa. Niente osservazioni di stile se il progetto non ha una regola in merito.\n\
 Chiudi con un giudizio di poche righe e poi, come ultima cosa, un blocco ```json con esattamente questa forma:\n\
@@ -580,17 +580,25 @@ pub async fn studio_review(handle: AppHandle, project: String, text: String, mod
     let (_, memoria) = memoria_progetto(&st, &p, false);
     let o = Opzioni {
         modello: match model.as_str() {
-            "auto" | "" => "opus".into(),
+            "auto" | "" => "sonnet".into(),
             "fable" => "claude-fable-5-1".into(),
             _ => model,
         },
         modo: "default".into(),
         solo_lettura: true,
+        max_turns: Some(25),
         ambiente,
         istruzioni: format!("{CTO}{}", memoria.unwrap_or_default()),
         cartelle: vec![],
     };
-    let richiesta = format!("{} Rivedi le modifiche fatte per questa richiesta dell'utente:\n<richiesta>\n{}\n</richiesta>", sviluppo::MARCA_REVISIONE, text.trim());
+    // Il diff arriva già pronto: il CTO non deve spendere turni per ricavarlo
+    let diff = sviluppo::git_diff_completo(&p, 60_000).await;
+    let richiesta = format!(
+        "{} Rivedi le modifiche fatte per questa richiesta dell'utente:\n<richiesta>\n{}\n</richiesta>\n\nQueste sono le modifiche non committate (diff e file nuovi):\n<diff>\n{}\n</diff>\nParti da qui: leggi altri file solo se il diff non basta a giudicare.",
+        sviluppo::MARCA_REVISIONE,
+        text.trim(),
+        if diff.trim().is_empty() { "(nessuna modifica rilevata da git)".to_string() } else { diff }
+    );
     let sid = sviluppo::avvia_headless_con(&handle, &p, &richiesta, None, o).await.map_err(AppError::msg)?;
     Ok(json!({ "session": sid }))
 }
@@ -674,9 +682,34 @@ fn cartella(app: &App, p: &str) -> Result<PathBuf> {
 }
 
 #[tauri::command]
-pub async fn studio_run(handle: AppHandle, project: String, text: String, model: String, plan: bool, profile: Option<String>, session: Option<String>, new_session: Option<bool>) -> Result<Value> {
+pub async fn studio_run(handle: AppHandle, project: String, text: String, model: String, plan: bool, profile: Option<String>, session: Option<String>, new_session: Option<bool>, attachments: Option<Vec<String>>) -> Result<Value> {
     let st = handle.state::<App>();
     let p = cartella(&st, &project)?;
+    // Allegati: copiati in una cartella dell'app che Claude può leggere, elencati in coda alla richiesta
+    let mut text = text;
+    let mut cartelle_extra: Vec<PathBuf> = vec![];
+    let allegati: Vec<String> = attachments.unwrap_or_default().into_iter().filter(|a| !a.trim().is_empty()).collect();
+    if !allegati.is_empty() {
+        let dest = st.data_dir.join("allegati").join("studio").join(uuid::Uuid::new_v4().to_string());
+        std::fs::create_dir_all(&dest)?;
+        let mut righe = vec![];
+        for a in &allegati {
+            let src = crate::tools::percorsi::espandi(a);
+            let nome = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "file".into());
+            if !src.is_file() {
+                return Err(AppError::msg(format!("Allegato non trovato: {a}")));
+            }
+            let meta = std::fs::metadata(&src)?;
+            if meta.len() > 50 * 1024 * 1024 {
+                return Err(AppError::msg(format!("{nome} supera i 50 MB")));
+            }
+            let d = dest.join(&nome);
+            std::fs::copy(&src, &d)?;
+            righe.push(format!("- {} ({})", d.display(), nome));
+        }
+        cartelle_extra.push(dest);
+        text.push_str(&format!("\n\nFile allegati dall'utente (leggili con lo strumento Read; le immagini si guardano con Read):\n{}", righe.join("\n")));
+    }
     let ambiente = match profile.as_deref().filter(|x| !x.is_empty()) {
         Some(pr) => ambiente_claudex(pr).await.map_err(AppError::msg)?,
         None => vec![],
@@ -688,21 +721,25 @@ pub async fn studio_run(handle: AppHandle, project: String, text: String, model:
             l.server, l.project, l.name, l.server
         )
     });
-    let (cartelle, memoria) = memoria_progetto(&st, &p, !plan);
+    let (mut cartelle, memoria) = memoria_progetto(&st, &p, !plan);
+    cartelle.extend(cartelle_extra);
     let o = Opzioni {
         cartelle,
         solo_lettura: false,
+        max_turns: if plan { Some(30) } else { None },
         modello: match model.as_str() {
             "auto" => String::new(),
             // Fable non ha un alias in Claude Code: si usa il nome del modello
             "fable" => "claude-fable-5-1".into(),
+            // Il piano lo prepara Sonnet, che è rapido: Opus serve per eseguire
+            "opus" if plan => "sonnet".into(),
             _ => model,
         },
         modo: if plan { "plan".into() } else { "acceptEdits".into() },
         ambiente,
         istruzioni: format!(
             "{SENIOR}\n{}{}{}",
-            if plan { "Ora sei in modalità piano: esplora e proponi un piano concreto (file da toccare, passi, come verificare), senza modificare nulla. L'utente lo approverà prima dell'esecuzione. Scrivi il piano completo nel tuo ultimo messaggio: Oltremare lo mostra con il pulsante «Approva ed esegui» (non cercare né usare ExitPlanMode e non chiedere approvazione a parole). Se il lavoro ha parti indipendenti, nel piano indica quali e di' che le farai in parallelo con sotto-agenti." } else { "" },
+            if plan { "Ora sei in modalità piano: proponi un piano concreto (file da toccare, passi, come verificare), senza modificare nulla. Fai presto: la memoria del progetto ti dice già com'è fatto, leggi solo i file che toccherai, usa Grep e Glob mirati, niente giri di esplorazione; piano in al massimo 12 punti. L'utente lo approverà prima dell'esecuzione. Scrivi il piano completo nel tuo ultimo messaggio: Oltremare lo mostra con il pulsante «Approva ed esegui» (non cercare né usare ExitPlanMode e non chiedere approvazione a parole). Se il lavoro ha parti indipendenti, nel piano indica quali e di' che le farai in parallelo con sotto-agenti." } else { "" },
             collegamento.unwrap_or_default(),
             memoria.unwrap_or_default()
         ),
@@ -744,7 +781,7 @@ pub async fn studio_approve(handle: AppHandle, project: String, session: String,
         Some(n) => format!("L'utente ha approvato il piano con queste indicazioni: {n}\nProcedi con l'implementazione e verifica il risultato."),
         None => "L'utente ha approvato il piano: procedi con l'implementazione e verifica il risultato (build e test se ci sono).".into(),
     };
-    studio_run(handle, project, testo, model, false, profile, Some(session), Some(false)).await
+    studio_run(handle, project, testo, model, false, profile, Some(session), Some(false), None).await
 }
 
 /// Secondo parere di un'altra AI (via Claudex) sul piano o sulle modifiche: solo lettura, su richiesta dell'utente.
@@ -760,7 +797,7 @@ pub async fn studio_second_opinion(handle: AppHandle, project: String, profile: 
     } else {
         "Fai una code review delle modifiche non ancora committate nella cartella corrente (usa git diff): bug, casi limite, sicurezza, semplificazioni. Elenca i problemi in ordine di gravità, con file e riga, in italiano.".to_string()
     };
-    let o = Opzioni { modo: "plan".into(), ambiente, ..Default::default() };
+    let o = Opzioni { modo: "plan".into(), ambiente, max_turns: Some(25), ..Default::default() };
     let mut cmd = sviluppo::comando_headless_con(&bin, &p, &richiesta, None, &s, &o);
     cmd.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null());
     let out = tokio::time::timeout(Duration::from_secs(600), cmd.output()).await.map_err(|_| AppError::msg("Il secondo parere ha impiegato troppo tempo"))?.map_err(|e| AppError::msg(e.to_string()))?;

@@ -28,6 +28,8 @@ export interface Task {
   planText?: string;
   /** Piano scartato dall'utente (resta visibile, ma non si esegue) */
   dropped?: boolean;
+  /** File allegati alla richiesta */
+  files?: string[];
   opinion?: string;
   error?: string;
   /** Revisione: sessione in corso, verdetti dei revisori (CTO e, se c'è, un'altra AI), verdetto unito,
@@ -101,7 +103,7 @@ export class Workspace {
   /** «Nuova conversazione»: la prossima richiesta non continua la sessione precedente */
   fresh = $state(false);
   /** Messaggi scritti mentre Claude lavora: partono in ordine, nella stessa sessione, appena finisce */
-  queue = $state<{ id: number; text: string }[]>([]);
+  queue = $state<{ id: number; text: string; files: string[] }[]>([]);
   /** La squadra al lavoro: sotto-agenti della sessione corrente, letti ogni pochi secondi */
   team = $state<TeamInfo | null>(null);
   /** Gli agenti definiti (di Oltremare e dell'utente) */
@@ -198,10 +200,15 @@ export class Workspace {
 
   // ---------- Orchestratore ----------
 
-  async send(text: string, newSession = false) {
-    if (!text.trim()) return;
-    const task: Task = { id: ++this.taskId, text: text.trim(), decision: null, model: this.modelChoice, plan: this.planChoice === "yes", profile: this.profile, session: null, phase: "deciding", fixRounds: 0 };
+  async send(text: string, newSession = false, files: string[] = []) {
+    if (!text.trim() && !files.length) return;
+    if (!text.trim()) text = files.length === 1 ? "Guarda il file allegato." : "Guarda i file allegati.";
+    // Un piano scartato o un lavoro fermato restano nella sessione di Claude: glielo si dice, così non li riprende
+    const prec = this.tasks.at(-1);
+    const annullato = !!prec && ((prec.phase === "done" && prec.dropped) || (prec.phase === "error" && prec.error === "Fermato da te"));
+    const task: Task = { id: ++this.taskId, text: text.trim(), decision: null, model: this.modelChoice, plan: this.planChoice === "yes", profile: this.profile, session: null, phase: "deciding", fixRounds: 0, files };
     this.tasks = [...this.tasks, task];
+    const invio = annullato ? `[L'utente ha annullato il piano/lavoro precedente: non proseguirlo e non darlo per approvato. Questa è la nuova richiesta, da valutare da capo.]\n${task.text}` : task.text;
     const t = this.tasks[this.tasks.length - 1];
     try {
       // L'orchestratore decide modello e piano se l'utente non ha scelto
@@ -213,7 +220,7 @@ export class Workspace {
       t.phase = t.plan ? "planning" : "working";
       const nuova = newSession || this.fresh;
       this.fresh = false;
-      const r = await api.studioRun(this.path, t.text, t.model, t.plan, t.profile || undefined, nuova ? undefined : (this.dev.sessionId ?? this.dev.session?.id ?? undefined), nuova);
+      const r = await api.studioRun(this.path, invio, t.model, t.plan, t.profile || undefined, nuova ? undefined : (this.dev.sessionId ?? this.dev.session?.id ?? undefined), nuova, files);
       t.session = r.session;
       this.dev.sessionId = r.session || null;
       this.dev.refreshSession();
@@ -266,8 +273,8 @@ export class Workspace {
     this.fresh = true;
   }
 
-  enqueue(text: string) {
-    if (text.trim()) this.queue = [...this.queue, { id: ++this.queueId, text: text.trim() }];
+  enqueue(text: string, files: string[] = []) {
+    if (text.trim() || files.length) this.queue = [...this.queue, { id: ++this.queueId, text: text.trim(), files }];
   }
 
   unqueue(id: number) {
@@ -279,7 +286,7 @@ export class Workspace {
     if (this.busy || !this.queue.length) return;
     const [q, ...rest] = this.queue;
     this.queue = rest;
-    this.send(q.text);
+    this.send(q.text, false, q.files);
   }
 
   /** Interrompe il lavoro in corso (o lascia il piano) e manda subito questo messaggio. */
@@ -321,8 +328,8 @@ export class Workspace {
       reviews.push({ who, profile: reviews.length ? (second?.name ?? "") : "", review: r });
       t.reviews = reviews;
       t.reviewSession = null;
-      // Dopo il CTO, se c'è un'altra AI disponibile, rivede anche lei (una sola volta per tornata)
-      if (reviews.length === 1 && second && this.reviewChoice !== "no") {
+      // Con «Doppia revisione», dopo il CTO rivede anche un'altra AI (una sola volta per tornata)
+      if (reviews.length === 1 && second && this.reviewChoice === "yes") {
         try {
           const r2 = await api.studioReview(this.path, t.text, "auto", second.name);
           t.reviewSession = r2.session;
@@ -356,8 +363,9 @@ export class Workspace {
     return t.decision?.kind !== "domanda";
   }
 
+  /** Il CTO rivede con Sonnet (rapido); con Fable resta Fable */
   private reviewer(t: Task) {
-    return t.model === "fable" ? "fable" : "opus";
+    return t.model === "fable" ? "fable" : "sonnet";
   }
 
   async startReview(t: Task) {

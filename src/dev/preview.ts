@@ -305,6 +305,18 @@ export function installPreview() {
           return { enabled: true, path: "/Users/demo/Desktop/Obsidian", ready: true, notes: 23, obsidian: true, projectNote: a.project ? "/Users/demo/Desktop/Obsidian/Progetti/negozio.md" : null, suggested: null };
         case "memory_open": return null;
         case "memory_seed": return 82;
+        case "memory_graph": {
+          const P = ["Persone/Anna Bianchi", "Persone/Luca Verdi", "Persone/Giulia Neri", "Progetti/negozio", "Progetti/Cobalto", "Progetti/Oltremare", "Argomenti/Deploy su Vercel", "Argomenti/Convenzioni commit", "Argomenti/Sconti e promozioni", "Diario/2026-10-29", "Diario/2026-10-30", "Oltremare", "Preferenze"];
+          const nodes: { id: string; title: string; folder: string; size: number; updated: string | null; missing?: boolean }[] = P.map((p) => ({ id: p + ".md", title: p.split("/").pop() ?? p, folder: p.includes("/") ? p.split("/")[0] : "", size: 400 + (p.length * 97) % 3000, updated: "2026-10-30" }));
+          nodes.push({ id: "?Fornitore Rossi", title: "Fornitore Rossi", folder: "", size: 0, updated: null, missing: true });
+          const E = [["Oltremare", "Preferenze"], ["Progetti/negozio", "Persone/Anna Bianchi"], ["Progetti/negozio", "Argomenti/Sconti e promozioni"], ["Progetti/negozio", "Argomenti/Deploy su Vercel"], ["Persone/Luca Verdi", "Persone/Anna Bianchi"], ["Persone/Luca Verdi", "Progetti/Cobalto"], ["Progetti/Cobalto", "Argomenti/Convenzioni commit"], ["Progetti/Oltremare", "Argomenti/Convenzioni commit"], ["Diario/2026-10-29", "Progetti/negozio"], ["Diario/2026-10-30", "Progetti/Oltremare"], ["Diario/2026-10-30", "Persone/Giulia Neri"], ["Persone/Giulia Neri", "Progetti/Cobalto"]];
+          return { nodes, edges: [...E.map(([a, b]) => ({ from: a + ".md", to: b + ".md" })), { from: "Progetti/negozio.md", to: "?Fornitore Rossi" }] };
+        }
+        case "memory_read":
+          return { nota: "negozio", percorso: "Progetti/negozio.md", fullPath: "/Users/demo/Desktop/Obsidian/Progetti/negozio.md", testo: "---\ncreato: 2026-10-29\n---\n# negozio\n\n## Com'è fatto\n- **Tecnologie:** TypeScript, Svelte, Vite\n- **Comandi:** `npm run dev`, `npm test`\n\n## Decisioni\n- Gli sconti si applicano al lordo, mai sotto zero ([[Sconti e promozioni]]).\n\n## Diario dei lavori\n### 2026-10-29 10:12 · fatto\n**Richiesta:** aggiungi gli sconti al carrello\n\nModulo `sconti.ts` con test; referente [[Anna Bianchi]].", collegamenti: ["Sconti e promozioni", "Anna Bianchi"], citata_da: ["2026-10-29", "Luca Verdi"] };
+        case "apri_file_ui": return null;
+        case "image_thumb":
+          return "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="320" height="200" fill="#dfe3ff"/><rect x="24" y="28" width="272" height="36" rx="8" fill="#7b86ff"/><rect x="24" y="84" width="180" height="14" rx="4" fill="#9aa3ff"/><rect x="24" y="110" width="220" height="14" rx="4" fill="#9aa3ff"/><rect x="24" y="150" width="90" height="26" rx="8" fill="#4f5bd5"/></svg>');
         case "studio_review": return { session: "rev1" };
         case "studio_agents":
           return [
