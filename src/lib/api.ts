@@ -227,7 +227,7 @@ export interface TeamInfo {
 }
 
 export interface MemoryGraph {
-  nodes: { id: string; title: string; folder: string; size: number; updated: string | null; missing?: boolean }[];
+  nodes: { id: string; title: string; folder: string; group?: string; size: number; updated: string | null; missing?: boolean }[];
   edges: { from: string; to: string }[];
 }
 

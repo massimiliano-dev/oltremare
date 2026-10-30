@@ -433,9 +433,11 @@ pub fn grafo(dir: &Path) -> Value {
     let mut mancanti: std::collections::BTreeSet<String> = Default::default();
     for (rel, p) in &tutte {
         let testo = std::fs::read_to_string(p).unwrap_or_default();
-        let cartella = rel.rsplit_once('/').map(|(c, _)| c.to_string()).unwrap_or_default();
+        // La cartella principale (Persone, Progetti, …) dà il colore; quella completa serve a raggruppare un progetto
+        let cartella = rel.split_once('/').map(|(c, _)| c.to_string()).unwrap_or_default();
+        let gruppo = rel.rsplit_once('/').map(|(c, _)| c.to_string()).unwrap_or_default();
         let aggiornato = testo.lines().take(8).find_map(|l| l.strip_prefix("aggiornato: ")).map(|x| x.trim().to_string());
-        nodi.push(json!({ "id": rel, "title": titolo_di(rel), "folder": cartella, "size": testo.chars().count(), "updated": aggiornato }));
+        nodi.push(json!({ "id": rel, "title": titolo_di(rel), "folder": cartella, "group": gruppo, "size": testo.chars().count(), "updated": aggiornato }));
         for l in collegamenti(&testo) {
             let chiave = l.to_lowercase();
             match per_titolo.get(&chiave) {

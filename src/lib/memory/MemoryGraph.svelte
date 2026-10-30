@@ -9,7 +9,7 @@
 
   let { focus = null, compact = false, scoped = false }: { focus?: string | null; compact?: boolean; scoped?: boolean } = $props();
 
-  type Node = { id: string; title: string; folder: string; size: number; missing: boolean; x: number; y: number; vx: number; vy: number; deg: number; r: number; fixed?: boolean };
+  type Node = { id: string; title: string; folder: string; group: string; size: number; missing: boolean; x: number; y: number; vx: number; vy: number; deg: number; r: number; fixed?: boolean };
   type Edge = { a: Node; b: Node };
 
   let canvas: HTMLCanvasElement;
@@ -43,6 +43,8 @@
     scopeId = root.id;
     let frontier = new Set([root.id]);
     inScope.add(root.id);
+    // Tutto ciò che sta nella cartella del progetto (le note «Lavori <giorno>») fa parte del suo grafo
+    for (const n of nodes) if (n.group === root.group && n.group.includes("/")) inScope.add(n.id);
     for (let hop = 0; hop < 2; hop++) {
       const next = new Set<string>();
       for (const e of edges) {
@@ -80,7 +82,7 @@
       nodes = g.nodes.map((v, i) => {
         const ang = (i / Math.max(1, n)) * Math.PI * 2;
         const rad = 80 + Math.sqrt(n) * 30 * (0.4 + ((i * 7919) % 100) / 100);
-        return { id: v.id, title: v.title, folder: v.folder, size: v.size, missing: !!v.missing, x: Math.cos(ang) * rad, y: Math.sin(ang) * rad, vx: 0, vy: 0, deg: 0, r: 4 };
+        return { id: v.id, title: v.title, folder: v.folder, group: v.group ?? v.folder, size: v.size, missing: !!v.missing, x: Math.cos(ang) * rad, y: Math.sin(ang) * rad, vx: 0, vy: 0, deg: 0, r: 4 };
       });
       for (const nd of nodes) byId.set(nd.id, nd);
       edges = g.edges.map((e) => ({ a: byId.get(e.from)!, b: byId.get(e.to)! })).filter((e) => e.a && e.b);
@@ -426,7 +428,7 @@
   <div class="gwrap" bind:this={wrap}>
     <div class="bar">
       <label class="search"><Icon name="search" size={14} /><input placeholder="Cerca una nota…" bind:value={query} aria-label="Cerca nella memoria" /></label>
-      <div class="chips">
+      <div class="chips" hidden={onlyProject && !!scopeId}>
         {#each folders as f (f)}
           <button class="chip" class:off={hidden[f]} style="--h:{hue(f)}" onclick={() => (hidden[f] = !hidden[f])} aria-pressed={!hidden[f]}>{f || "principali"}</button>
         {/each}
@@ -444,6 +446,8 @@
       <p class="msg">{error}</p>
     {:else if !count.nodes}
       <p class="msg">La memoria è vuota: le note compaiono qui man mano che gli agenti (o tu) le scrivono.</p>
+    {:else if onlyProject && scopeId && shown <= 1}
+      <p class="msg low">Per ora il progetto ha solo la sua nota. La stella cresce con i lavori nello Studio (un nodo per ogni giorno) e con i collegamenti [[...]] a persone e argomenti.</p>
     {/if}
     <canvas bind:this={canvas} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onwheel={wheel} aria-label="Grafo delle note"></canvas>
   </div>
@@ -573,6 +577,11 @@
     padding: 4px 8px;
     border-radius: 999px;
     background: color-mix(in oklch, var(--paper) 88%, transparent);
+  }
+  .msg.low {
+    top: auto;
+    bottom: 22px;
+    transform: translateX(-50%);
   }
   .msg {
     position: absolute;
