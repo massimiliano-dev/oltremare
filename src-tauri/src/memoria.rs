@@ -262,25 +262,60 @@ pub fn diario(dir: &Path, titolo: &str, testo: &str) -> Result<(), String> {
     scrivi(dir, &format!("Diario/{}", oggi()), &format!("## {ora} · {titolo}\n\n{}", testo.trim()), "aggiungi", "Diario").map(|_| ())
 }
 
-/// Nota di un progetto dello Studio (Progetti/<nome>): la crea con le sezioni se manca.
+/// Dove sta la nota-cardine del progetto: `Progetti/<nome>/<nome>.md`. Le note vecchie, piatte
+/// (`Progetti/<nome>.md`), vengono spostate nella cartella: i collegamenti [[nome]] restano validi.
+fn percorso_progetto(dir: &Path, titolo: &str) -> PathBuf {
+    let n = nome_file(titolo);
+    let nuovo = dir.join("Progetti").join(&n).join(format!("{n}.md"));
+    let vecchio = dir.join("Progetti").join(format!("{n}.md"));
+    if !nuovo.exists() && vecchio.is_file() {
+        let _ = std::fs::create_dir_all(nuovo.parent().unwrap_or(dir));
+        let _ = std::fs::rename(&vecchio, &nuovo);
+    }
+    nuovo
+}
+
+/// Sposta tutte le note piatte dei progetti nelle loro cartelle (una volta, all'avvio della memoria).
+pub fn migra_progetti(dir: &Path) -> usize {
+    let mut n = 0;
+    if let Ok(rd) = std::fs::read_dir(dir.join("Progetti")) {
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_file() && p.extension().is_some_and(|x| x == "md") {
+                let titolo = p.file_stem().map(|x| x.to_string_lossy().into_owned()).unwrap_or_default();
+                if percorso_progetto(dir, &titolo).exists() && !p.exists() {
+                    n += 1;
+                }
+            }
+        }
+    }
+    n
+}
+
+fn cartella_di(testo: &str) -> Option<String> {
+    testo.lines().take(10).find_map(|l| l.strip_prefix("cartella: ")).map(|c| c.trim().to_string())
+}
+
+/// Nota-cardine di un progetto dello Studio: la crea con le sezioni se manca.
 pub fn nota_progetto(dir: &Path, progetto: &str, cartella: &Path) -> Result<PathBuf, String> {
     let mut titolo = progetto.to_string();
-    let nota = format!("Progetti/{}", nome_file(progetto));
-    if let Some(p) = risolvi(dir, &nota) {
+    let p = percorso_progetto(dir, &titolo);
+    if p.is_file() {
         // Due progetti con lo stesso nome: la nota dice di quale cartella è
         let t = std::fs::read_to_string(&p).unwrap_or_default();
-        let altra = t.lines().take(8).find_map(|l| l.strip_prefix("cartella: ")).map(|c| c.trim() != cartella.display().to_string()).unwrap_or(false);
+        let altra = cartella_di(&t).is_some_and(|c| c != cartella.display().to_string());
         if !altra {
             return Ok(p);
         }
         let madre = cartella.parent().and_then(|m| m.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         titolo = format!("{progetto} ({madre})");
-        if let Some(p) = risolvi(dir, &format!("Progetti/{}", nome_file(&titolo))) {
-            return Ok(p);
+        let p2 = percorso_progetto(dir, &titolo);
+        if p2.is_file() {
+            return Ok(p2);
         }
     }
     let progetto = titolo.as_str();
-    let p = dir.join(format!("Progetti/{}.md", nome_file(progetto)));
+    let p = percorso_progetto(dir, progetto);
     if let Some(c) = p.parent() {
         std::fs::create_dir_all(c).map_err(|e| e.to_string())?;
     }
@@ -295,13 +330,33 @@ pub fn nota_progetto(dir: &Path, progetto: &str, cartella: &Path) -> Result<Path
     Ok(p)
 }
 
-/// Contenuto della nota del progetto per Claude: tutto tranne il diario, di cui restano le ultime voci.
+/// Le note «Lavori <giorno>» del progetto, dalla più recente.
+fn note_lavori(nota: &Path) -> Vec<PathBuf> {
+    let Some(dir) = nota.parent() else { return vec![] };
+    let mut v: Vec<PathBuf> = std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("Lavori ")) && p.extension().is_some_and(|x| x == "md")).collect();
+    v.sort();
+    v.reverse();
+    v
+}
+
+/// Contenuto della nota del progetto per Claude: la nota-cardine (senza le voci vecchie del diario)
+/// e le ultime voci di lavoro dalle note «Lavori <giorno>».
 pub fn contesto_progetto(nota: &Path) -> String {
     let t = std::fs::read_to_string(nota).unwrap_or_default();
     let corpo = t.strip_prefix("---\n").and_then(|r| r.find("\n---\n").map(|i| r[i + 5..].to_string())).unwrap_or(t);
-    let (prima, diario) = corpo.split_once("## Diario dei lavori").unwrap_or((&corpo, ""));
-    let voci: Vec<&str> = diario.split("\n### ").skip(1).collect();
-    let ultime: Vec<String> = voci.iter().rev().take(8).rev().map(|v| format!("### {}", v.trim())).collect();
+    let (prima, diario_vecchio) = corpo.split_once("## Diario dei lavori").unwrap_or((&corpo, ""));
+    let mut voci: Vec<String> = vec![];
+    for f in note_lavori(nota).into_iter().take(3) {
+        let Ok(tx) = std::fs::read_to_string(&f) else { continue };
+        for v in tx.split("\n### ").skip(1) {
+            voci.push(format!("### {}", v.trim()));
+        }
+    }
+    // Le voci rimaste nella nota-cardine (prima della nuova forma) contano ancora
+    for v in diario_vecchio.split("\n### ").skip(1) {
+        voci.push(format!("### {}", v.trim()));
+    }
+    let ultime: Vec<String> = voci.into_iter().take(8).collect();
     let mut out: String = prima.trim().chars().take(12_000).collect();
     if !ultime.is_empty() {
         out.push_str(&format!("\n\n## Diario dei lavori (ultime voci)\n{}", ultime.join("\n\n")));
@@ -309,14 +364,33 @@ pub fn contesto_progetto(nota: &Path) -> String {
     out
 }
 
-/// Voce nel diario dei lavori di un progetto (in fondo alla nota del progetto).
+/// Voce nel diario dei lavori di un progetto: nella nota «Lavori <giorno>» del progetto (collegata alla
+/// nota-cardine) e una riga nel diario generale del giorno. Così in Obsidian ogni progetto ha il suo grafo.
 pub fn lavoro_progetto(dir: &Path, progetto: &str, cartella: &Path, richiesta: &str, esito: &str, ok: bool) -> Result<(), String> {
-    let quando = chrono::Local::now().format("%Y-%m-%d %H:%M");
+    let ora = chrono::Local::now().format("%H:%M");
+    let giorno = oggi();
     let r: String = richiesta.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(200).collect();
     let e: String = esito.trim().chars().take(800).collect();
-    let voce = format!("### {quando} · {}\n**Richiesta:** {r}\n\n{}", if ok { "fatto" } else { "non riuscito" }, e);
-    nota_progetto(dir, progetto, cartella)?;
-    scrivi(dir, &format!("Progetti/{}", nome_file(progetto)), &voce, "aggiungi", "Progetti").map(|_| ())
+    let voce = format!("### {giorno} {ora} · {}\n**Richiesta:** {r}\n\n{}", if ok { "fatto" } else { "non riuscito" }, e);
+    let hub = nota_progetto(dir, progetto, cartella)?;
+    let titolo = hub.file_stem().map(|x| x.to_string_lossy().into_owned()).unwrap_or_else(|| progetto.to_string());
+    let lavori = hub.with_file_name(format!("Lavori {giorno}.md"));
+    let rel_lavori = lavori.strip_prefix(dir).unwrap_or(&lavori).to_string_lossy().replace('\\', "/").trim_end_matches(".md").to_string();
+    if lavori.is_file() {
+        scrivi(dir, &rel_lavori, &voce, "aggiungi", "Progetti")?;
+    } else {
+        scrivi(dir, &rel_lavori, &format!("Lavori su [[{titolo}]] del {giorno} · vedi anche [[{giorno}]].\n\n{voce}"), "crea", "Progetti")?;
+        // La nota-cardine rimanda al giorno di lavoro
+        let t = std::fs::read_to_string(&hub).unwrap_or_default();
+        let link = format!("- [[Lavori {giorno}]]");
+        if !t.contains(&link) {
+            let nuovo = if t.contains("## Diario dei lavori") { format!("{}\n{link}\n", t.trim_end()) } else { format!("{}\n\n## Diario dei lavori\n{link}\n", t.trim_end()) };
+            std::fs::write(&hub, segna_aggiornato(&nuovo)).map_err(|e| e.to_string())?;
+        }
+    }
+    // Il diario generale del giorno rimanda al progetto
+    let _ = scrivi(dir, &format!("Diario/{giorno}"), &format!("- {ora} · lavoro su [[{titolo}]]: {} → [[Lavori {giorno}]]", r.chars().take(90).collect::<String>()), "aggiungi", "Diario");
+    Ok(())
 }
 
 /// Cosa gli agenti sanno sempre: le preferenze e l'elenco delle note (per cercarle e collegarle).
@@ -464,10 +538,21 @@ mod prove {
         assert!(scrivi(&dir, "../fuori", "x", "crea", "").is_err() || !dir.parent().unwrap().join("fuori.md").exists());
         lavoro_progetto(&dir, "negozio", Path::new("/tmp/negozio"), "aggiungi sconti", "Fatto: sconti con test.", true).unwrap();
         lavoro_progetto(&dir, "negozio", Path::new("/tmp/negozio"), "correggi arrotondamento", "Fatto.", true).unwrap();
-        let p = std::fs::read_to_string(dir.join("Progetti/negozio.md")).unwrap();
-        assert!(p.contains("aggiungi sconti") && p.contains("correggi arrotondamento") && p.contains("## Com'è fatto"));
-        let c = contesto_progetto(&dir.join("Progetti/negozio.md"));
+        let hub = dir.join("Progetti/negozio/negozio.md");
+        let p = std::fs::read_to_string(&hub).unwrap();
+        assert!(p.contains("## Com'è fatto") && p.contains("[[Lavori ") , "la nota-cardine rimanda al giorno di lavoro: {p}");
+        let lavori = note_lavori(&hub);
+        assert_eq!(lavori.len(), 1);
+        let l = std::fs::read_to_string(&lavori[0]).unwrap();
+        assert!(l.contains("[[negozio]]") && l.contains("aggiungi sconti") && l.contains("correggi arrotondamento"));
+        let c = contesto_progetto(&hub);
         assert!(c.contains("Com'è fatto") && c.contains("correggi arrotondamento") && !c.contains("creato:"));
+        // Una nota piatta vecchia finisce nella cartella del progetto
+        std::fs::write(dir.join("Progetti/Vecchio.md"), "---\ncartella: /tmp/vecchio\n---\n# Vecchio\n\n## Com'è fatto\nroba\n\n## Diario dei lavori\n### 2026-01-01 · fatto\nx\n").unwrap();
+        let v = nota_progetto(&dir, "Vecchio", Path::new("/tmp/vecchio")).unwrap();
+        assert_eq!(v, dir.join("Progetti/Vecchio/Vecchio.md"));
+        assert!(!dir.join("Progetti/Vecchio.md").exists());
+        assert!(contesto_progetto(&v).contains("2026-01-01"));
         diario(&dir, "Briefing", "Buongiorno.").unwrap();
         assert!(contesto(&dir).contains("[[Anna Bianchi]]"));
         let g = grafo(&dir);

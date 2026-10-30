@@ -307,6 +307,7 @@ pub fn descrizione_automatica(p: &Path) -> String {
 
 /// Crea (o completa) la nota in memoria di ogni progetto dello Studio. Restituisce quante note ha scritto.
 pub fn semina_memoria(radici: &[(String, PathBuf)], dir: &Path) -> usize {
+    crate::memoria::migra_progetti(dir);
     let mut n = 0;
     for (nome, gruppo, _, cartella) in elenca(radici) {
         let titolo = if gruppo.is_empty() { nome.clone() } else { format!("{gruppo} {nome}") };
@@ -559,7 +560,7 @@ Usala come punto di partenza invece di riesplorare tutto. {}",
             nota.display(),
             crate::memoria::contesto_progetto(&nota),
             if scrive {
-                "Alla fine, se hai imparato qualcosa di stabile, aggiorna quella nota con Edit: la sezione «Com'è fatto» (stack, struttura delle cartelle, comandi per avviare, testare e compilare, convenzioni, punti delicati: concisa, da riscrivere se è superata) e «Decisioni» (scelte importanti con il perché, una riga ciascuna). Non toccare «Diario dei lavori»: lo aggiorna Oltremare."
+                "Alla fine, se hai imparato qualcosa di stabile, aggiorna quella nota con Edit: la sezione «Com'è fatto» (stack, struttura delle cartelle, comandi per avviare, testare e compilare, convenzioni, punti delicati: concisa, da riscrivere se è superata) e «Decisioni» (scelte importanti con il perché, una riga ciascuna, con [[collegamenti]] a persone e argomenti quando esistono). Non toccare «Diario dei lavori» né le note «Lavori <giorno>»: le aggiorna Oltremare."
             } else {
                 "Non modificarla."
             }
