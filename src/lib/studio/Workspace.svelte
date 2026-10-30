@@ -156,7 +156,7 @@
       {:else if ws.dev.tab === "team"}
         <Team />
       {:else if ws.dev.tab === "memory"}
-        <MemoryGraph compact focus={ws.memoryNote} />
+        <MemoryGraph compact scoped focus={ws.memoryNote} />
       {:else}
         {#if ws.dev.urls.length}
           <div class="urlbar">

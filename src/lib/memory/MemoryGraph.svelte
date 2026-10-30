@@ -7,7 +7,7 @@
   import { api, errorText, type MemoryGraph, type MemoryNote } from "../api";
   import { ui } from "../state/ui.svelte";
 
-  let { focus = null, compact = false }: { focus?: string | null; compact?: boolean } = $props();
+  let { focus = null, compact = false, scoped = false }: { focus?: string | null; compact?: boolean; scoped?: boolean } = $props();
 
   type Node = { id: string; title: string; folder: string; size: number; missing: boolean; x: number; y: number; vx: number; vy: number; deg: number; r: number; fixed?: boolean };
   type Edge = { a: Node; b: Node };
@@ -27,6 +27,32 @@
   let hovered = $state<string | null>(null);
   let note = $state<MemoryNote | null>(null);
   let folders = $state<string[]>([]);
+  /** Solo la memoria del progetto (la nota a fuoco e ciò che le è collegato entro due passaggi) */
+  // L'ambito iniziale è quello chiesto da chi monta il grafo (lo Studio: solo il progetto)
+  // svelte-ignore state_referenced_locally
+  let onlyProject = $state(scoped);
+  let inScope = new Set<string>();
+  let scopeId = $state<string | null>(null);
+
+  function computeScope() {
+    inScope = new Set();
+    scopeId = null;
+    if (!focus) return;
+    const root = byId.get(focus) ?? nodes.find((n) => focus!.endsWith(`/${n.id}`));
+    if (!root) return;
+    scopeId = root.id;
+    let frontier = new Set([root.id]);
+    inScope.add(root.id);
+    for (let hop = 0; hop < 2; hop++) {
+      const next = new Set<string>();
+      for (const e of edges) {
+        if (frontier.has(e.a.id) && !inScope.has(e.b.id)) next.add(e.b.id);
+        if (frontier.has(e.b.id) && !inScope.has(e.a.id)) next.add(e.a.id);
+      }
+      for (const id of next) inScope.add(id);
+      frontier = next;
+    }
+  }
 
   // Vista: scala e scorrimento
   let scale = 1;
@@ -65,6 +91,7 @@
       for (const nd of nodes) nd.r = nd.missing ? 3 : 4 + Math.min(10, Math.sqrt(nd.deg) * 2.2) + Math.min(3, nd.size / 4000);
       folders = [...new Set(nodes.map((x) => x.folder))].sort((a, b) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)));
       count = { nodes: nodes.length, edges: edges.length };
+      computeScope();
       // Qualche centinaio di passi prima del primo disegno, così il grafo nasce già assestato
       alpha = 1;
       for (let i = 0; i < 260 && alpha > 0.004; i++) step();
@@ -79,7 +106,8 @@
   }
 
   function visible(nd: Node) {
-    return !hidden[nd.folder];
+    if (hidden[nd.folder]) return false;
+    return !(onlyProject && scopeId) || inScope.has(nd.id);
   }
 
   function matches(nd: Node) {
@@ -373,7 +401,24 @@
   }
 
   $effect(() => {
-    if (focus && nodes.length) focusOn(focus);
+    if (focus && nodes.length) {
+      computeScope();
+      focusOn(focus);
+    }
+  });
+
+  function toggleScope() {
+    onlyProject = !onlyProject;
+    alpha = 1;
+    for (let i = 0; i < 200 && alpha > 0.004; i++) step();
+    alpha = 0.3;
+    fit();
+  }
+
+  const shown = $derived.by(() => {
+    void onlyProject;
+    void count;
+    return nodes.filter(visible).length;
   });
 </script>
 
@@ -386,7 +431,10 @@
           <button class="chip" class:off={hidden[f]} style="--h:{hue(f)}" onclick={() => (hidden[f] = !hidden[f])} aria-pressed={!hidden[f]}>{f || "principali"}</button>
         {/each}
       </div>
-      <span class="count">{count.nodes} note · {count.edges} collegamenti</span>
+      {#if scopeId}
+        <button class="chip scope" class:off={!onlyProject} onclick={toggleScope} aria-pressed={onlyProject} title={onlyProject ? "Mostra tutta la memoria" : "Solo questo progetto"}>{onlyProject ? "Solo questo progetto" : "Tutta la memoria"}</button>
+      {/if}
+      <span class="count">{onlyProject && scopeId ? `${shown} di ${count.nodes} note` : `${count.nodes} note · ${count.edges} collegamenti`}</span>
       <button class="icon-btn" onclick={() => { alpha = 1; fit(); }} title="Ridisponi e adatta" aria-label="Adatta"><Icon name="refresh" size={14} /></button>
       <button class="icon-btn" onclick={() => api.memoryOpen().catch((e) => ui.toast(errorText(e), "error"))} title="Apri in Obsidian" aria-label="Apri in Obsidian"><Icon name="book" size={14} /></button>
     </div>
@@ -506,6 +554,17 @@
   .chip.off {
     opacity: 0.35;
     text-decoration: line-through;
+  }
+  .chip.scope {
+    --h: 275;
+    opacity: 1;
+    text-decoration: none;
+    box-shadow: inset 0 0 0 1.5px oklch(0.6 0.15 var(--h));
+  }
+  .chip.scope.off {
+    box-shadow: none;
+    background: var(--paper-3);
+    color: var(--ink-2);
   }
   .count {
     margin-left: auto;
