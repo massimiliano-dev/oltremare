@@ -160,10 +160,10 @@
         {#if !p.installed}
           <code class="cmd">{p.commands.join(" && ")}</code>
         {:else if !p.cliOk}
-          <small class="warn">Plugin installato, ma manca «{p.cli}» sul Mac.</small>
+          <small class="warn">Collegato, ma manca «{p.cli}» sul Mac: <code class="cmd">{p.commands.join(" && ")}</code></small>
         {/if}
       </span>
-      {#if !p.installed}
+      {#if !p.installed || !p.cliOk}
         <button class="btn btn-line sm" onclick={() => copia(p.commands.join(" && "), "Comando")} title="Copia i comandi da lanciare nel Terminale"><Icon name="copy" size={13} /> Copia</button>
       {:else}
         <small class="okt">installato</small>
