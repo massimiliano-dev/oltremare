@@ -405,8 +405,13 @@ pub fn memory_info(app: tauri::State<'_, crate::App>, project: Option<String>) -
     let s = app.store.settings();
     let dir = cartella(&s);
     let obsidian = Path::new("/Applications/Obsidian.app").exists();
+    // La nota del progetto ha lo stesso nome che usa lo Studio (gruppo + cartella); se manca si crea
     let nota = match (&dir, project.as_deref()) {
-        (Some(d), Some(p)) => Path::new(p).file_name().and_then(|n| risolvi(d, &format!("Progetti/{}", nome_file(&n.to_string_lossy())))).map(|x| x.to_string_lossy().into_owned()),
+        (Some(d), Some(p)) => {
+            let cartella = Path::new(p);
+            let titolo = crate::studio::titolo_progetto(&crate::studio::radici(&app), cartella);
+            nota_progetto(d, &titolo, cartella).ok().map(|x| x.to_string_lossy().into_owned())
+        }
         _ => None,
     };
     json!({
