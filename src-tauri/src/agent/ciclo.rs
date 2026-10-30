@@ -351,10 +351,16 @@ pub fn avvia(app: &AppHandle, a: Avvio) -> Result<RunView> {
                 crate::voce::parla_risposta(&app, &t);
             }
         }
-        // Il briefing del mattino resta nella nota del giorno
-        if ctx.agent.id == "briefing" && stato == "done" {
+        // Il briefing del mattino e la rassegna tech restano nella nota del giorno
+        if stato == "done" && (ctx.agent.id == "briefing" || ctx.agent.id == "rassegna-tech") {
             if let (Some(dir), Some(t)) = (crate::memoria::cartella(&st.store.settings()), messaggi.iter().rev().find(|m| m.ruolo == Ruolo::Assistente).map(testo_di)) {
-                let _ = crate::memoria::diario(&dir, "Briefing", &t);
+                if ctx.agent.id == "briefing" {
+                    let _ = crate::memoria::diario(&dir, "Briefing", &t);
+                } else {
+                    // Della rassegna si salva solo la sezione finale con i punti che contano
+                    let sezione = t.rfind("## Novità tech").map(|i| t[i + "## Novità tech".len()..].trim().to_string()).filter(|x| !x.is_empty()).unwrap_or_else(|| t.chars().take(1500).collect());
+                    let _ = crate::memoria::diario(&dir, "Novità tech", &sezione);
+                }
             }
         }
     });

@@ -298,6 +298,42 @@ Chiudi chiedendo se vuole che ti occupi di qualcosa. Se ti servono dettagli, usa
     }
 }
 
+/// La rassegna tech del mattino: novità delle ultime 24 ore da fonti primarie, su misura per gli stack dell'utente.
+pub fn agente_rassegna() -> Agent {
+    let t = now_ms();
+    Agent {
+        id: "rassegna-tech".into(),
+        name: "Rassegna tech".into(),
+        icon: "globe".into(),
+        hue: 200.0,
+        description: "Ogni mattina: novità tech, sviluppo web e mobile, sicurezza, cosa fare oggi".into(),
+        system_prompt: "Fai il punto sulle novità tech delle ultime 24 ore (o dall'ultimo aggiornamento che trovi nel Diario: cerca in memoria «Novità tech» e leggi la nota Diario del giorno prima). \
+Cerca sul web su fonti affidabili e primarie (blog ufficiali di vendor e framework, release notes, GitHub releases, CVE/advisory, The Verge/Ars/HN per il contesto). Niente rumore, niente notizie già viste ieri.\n\n\
+Struttura la risposta così:\n\n\
+1. Mondo tech in breve — massimo 5 punti: cosa è successo di rilevante (AI, cloud, big tech, hardware, regolamentazione UE/Italia). Una riga di fatto + una riga di «perché mi interessa».\n\
+2. Sviluppo web — novità su Node, TypeScript, React/Next.js, Angular, Vue/Nuxt, Astro, Vite, .NET/ASP.NET, NestJS, Prisma, Tailwind, browser engine e standard web. Indica numero di versione e se ci sono breaking change.\n\
+3. Sviluppo mobile — iOS/Swift, Android/Kotlin, React Native, Flutter, Capacitor/Expo, policy e scadenze di App Store e Google Play.\n\
+4. Sicurezza — vulnerabilità e patch che toccano i miei stack: .NET, Node/npm, React/Next, Angular, Flutter/React Native, Firebase, Azure, Postgres/SQL Server, Docker. Per ognuna: CVE, gravità, versione che corregge, se mi riguarda.\n\
+5. Cosa farei oggi — massimo 3 azioni concrete, collegate ai miei progetti in memoria (es. [[Vickey Vickey]], [[Somma]], [[Eleva]], [[SmartKey SmartKey]]): leggi le loro note con memoria_leggi per sapere che stack usano.\n\n\
+Regole:\n\
+- Ogni voce ha il link alla fonte.\n\
+- Se una notizia è incerta o solo un rumor, dillo.\n\
+- Se in 24 ore non è successo niente di rilevante in una sezione, scrivi «niente di nuovo» invece di riempire.\n\
+- Breve: deve leggersi in due minuti.\n\
+- Chiudi con una sezione finale intitolata esattamente «## Novità tech» con i 3-5 punti che contano davvero (ognuno con il link): Oltremare la salva da sola nel Diario di oggi, tu non scrivere nel Diario."
+            .into(),
+        tools: ["web"].iter().map(|s| s.to_string()).collect(),
+        voice_reply: "never".into(),
+        effort: "medium".into(),
+        max_turns: 40,
+        triggers: vec![serde_json::json!({ "kind": "cron", "expr": "15 8 * * 1-5", "prompt": "Prepara la rassegna tech di oggi.", "catchUp": true, "speak": false })],
+        system: false,
+        created_at: t,
+        updated_at: t,
+        ..Agent::default()
+    }
+}
+
 pub fn agente_sviluppatore() -> Agent {
     let t = now_ms();
     let mut a = Agent {
@@ -396,6 +432,18 @@ impl Store {
                 let _ = s.save_agent(&d);
             }
             let _ = s.set_pref("migrazione:sviluppatore", serde_json::json!(true));
+        }
+        // La rassegna tech arriva una volta sola (se l'utente la elimina non torna)
+        if s.pref("migrazione:rassegna").is_none() {
+            if s.agent("rassegna-tech").is_err() {
+                let mut r = agente_rassegna();
+                if let Ok(a) = s.agent("assistente") {
+                    r.provider = a.provider;
+                    r.model = a.model;
+                }
+                let _ = s.save_agent(&r);
+            }
+            let _ = s.set_pref("migrazione:rassegna", serde_json::json!(true));
         }
         // Il briefing c'è sempre
         if s.agent("briefing").is_err() {
