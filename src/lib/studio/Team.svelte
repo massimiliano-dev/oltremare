@@ -82,6 +82,7 @@
   });
 </script>
 
+<div class="twrap">
 <div class="team">
   <section class="org" aria-label="Chi sta lavorando">
     <article class="node senior" class:live={senior.live} style="--h:{senior.h}">
@@ -191,17 +192,39 @@
     {/if}
   </aside>
 </div>
+</div>
 
 <style>
-  .team {
+  .twrap {
     flex: 1;
     min-height: 0;
+    min-width: 0;
+    display: flex;
+    container-type: inline-size;
+  }
+  .team {
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 300px;
   }
+  /* Nella colonna centrale dello Studio lo spazio è poco: scambi sotto, non di fianco */
+  @container (max-width: 820px) {
+    .team {
+      grid-template-columns: 1fr;
+      grid-template-rows: minmax(0, 1fr) minmax(150px, 40%);
+    }
+    .feed {
+      border-left: 0 !important;
+      border-top: 1px solid var(--rule-soft);
+    }
+  }
   .org {
     overflow-y: auto;
-    padding: 18px 20px 24px;
+    min-width: 0;
+    padding: 20px 22px 28px;
     display: grid;
     align-content: start;
     justify-items: center;
@@ -210,9 +233,10 @@
   }
   .node {
     width: 100%;
+    min-width: 0;
     display: grid;
-    gap: 8px;
-    padding: 12px 14px;
+    gap: 10px;
+    padding: 14px 16px;
     border-radius: 14px;
     background: var(--paper);
     box-shadow: inset 0 0 0 1px var(--rule-soft), 0 1px 2px oklch(0.3 0.05 var(--tint-h) / 0.05);
@@ -230,7 +254,9 @@
   .node header {
     display: flex;
     align-items: center;
-    gap: 10px;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    min-width: 0;
   }
   .av {
     flex: none;
@@ -253,13 +279,16 @@
   .who strong {
     font-size: var(--t-sm);
     font-weight: 650;
+    overflow-wrap: anywhere;
   }
   .who small {
     font-size: var(--t-xs);
     color: var(--ink-3);
+    overflow-wrap: anywhere;
   }
   .state {
     flex: none;
+    margin-left: auto;
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -291,8 +320,9 @@
   .brief {
     margin: 0;
     font-size: var(--t-sm);
-    line-height: 1.45;
+    line-height: 1.5;
     color: var(--ink-2);
+    overflow-wrap: anywhere;
     display: -webkit-box;
     -webkit-line-clamp: 3;
     line-clamp: 3;
@@ -303,13 +333,15 @@
   .steps li {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
+    min-width: 0;
     font-size: var(--t-xs);
     color: var(--ink-3);
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
   }
   .act span,
   .steps li span {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -317,15 +349,18 @@
   .steps {
     list-style: none;
     margin: 0;
-    padding: 0;
+    padding: 10px 12px;
     display: grid;
-    gap: 4px;
+    gap: 6px;
+    border-radius: 9px;
+    background: var(--paper-2);
   }
   .prog {
     margin: 0;
     font-size: var(--t-xs);
     color: var(--ink-3);
     font-style: italic;
+    overflow-wrap: anywhere;
   }
   .rep {
     justify-self: start;
@@ -346,7 +381,7 @@
   }
   .rail {
     width: 2px;
-    height: 26px;
+    height: 32px;
     background: var(--rule);
     border-radius: 2px;
   }
@@ -363,8 +398,8 @@
   .agents {
     width: 100%;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+    gap: 12px;
   }
   .empty {
     max-width: 520px;
@@ -411,8 +446,9 @@
     color: oklch(0.85 0.11 var(--h));
   }
   .feed {
+    min-width: 0;
     overflow-y: auto;
-    padding: 14px 14px 20px;
+    padding: 16px 16px 22px;
     border-left: 1px solid var(--rule-soft);
     background: var(--paper-2);
   }
@@ -439,8 +475,9 @@
   .feed li {
     position: relative;
     display: grid;
-    gap: 3px;
-    padding: 8px 10px;
+    gap: 4px;
+    min-width: 0;
+    padding: 9px 11px;
     border-radius: 9px;
     background: var(--paper);
     font-size: var(--t-xs);
@@ -458,6 +495,7 @@
   .fh {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 4px;
     font-weight: 650;
     color: oklch(0.45 0.13 var(--h));
@@ -473,7 +511,8 @@
   .feed p {
     margin: 0;
     color: var(--ink-2);
-    line-height: 1.45;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
     display: -webkit-box;
     -webkit-line-clamp: 4;
     line-clamp: 4;
@@ -482,15 +521,6 @@
   }
   .f-report {
     box-shadow: inset 2px 0 0 oklch(0.65 0.14 var(--h));
-  }
-  @media (max-width: 1100px) {
-    .team {
-      grid-template-columns: 1fr;
-    }
-    .feed {
-      border-left: 0;
-      border-top: 1px solid var(--rule-soft);
-    }
   }
   @media (prefers-reduced-motion: reduce) {
     .live .dot,

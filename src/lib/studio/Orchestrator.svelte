@@ -87,7 +87,8 @@
 
   const KIND: Record<string, string> = { domanda: "Domanda", piccola: "Modifica piccola", media: "Lavoro medio", grande: "Lavoro grande" };
   const MODEL: Record<string, string> = { haiku: "Haiku", sonnet: "Sonnet", opus: "Opus", fable: "Fable", auto: "Auto" };
-  const items = $derived(ws.dev.session?.items ?? []);
+  // Con «Nuova conversazione» la chat resta vuota finché non parte la prossima richiesta
+  const items = $derived(ws.fresh ? [] : (ws.dev.session?.items ?? []));
   /** Le azioni consecutive di Claude si raggruppano in un blocco con la guida di rientro */
   const blocks = $derived.by(() => {
     const out: { kind: "user" | "text" | "tools"; start: number; items: DevItem[] }[] = [];

@@ -271,6 +271,8 @@ export class Workspace {
     this.tasks = [];
     this.queue = [];
     this.fresh = true;
+    this.team = null;
+    this.persist();
   }
 
   enqueue(text: string, files: string[] = []) {
