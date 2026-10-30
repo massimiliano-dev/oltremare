@@ -379,7 +379,7 @@ pub fn lavoro_progetto(dir: &Path, progetto: &str, cartella: &Path, richiesta: &
     if lavori.is_file() {
         scrivi(dir, &rel_lavori, &voce, "aggiungi", "Progetti")?;
     } else {
-        scrivi(dir, &rel_lavori, &format!("Lavori su [[{titolo}]] del {giorno} · vedi anche [[{giorno}]].\n\n{voce}"), "crea", "Progetti")?;
+        scrivi(dir, &rel_lavori, &format!("Lavori su [[{titolo}]] del {giorno}.\n\n{voce}"), "crea", "Progetti")?;
         // La nota-cardine rimanda al giorno di lavoro
         let t = std::fs::read_to_string(&hub).unwrap_or_default();
         let link = format!("- [[Lavori {giorno}]]");
