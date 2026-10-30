@@ -45,16 +45,21 @@
     inScope.add(root.id);
     // Tutto ciò che sta nella cartella del progetto (le note «Lavori <giorno>») fa parte del suo grafo
     for (const n of nodes) if (n.group === root.group && n.group.includes("/")) inScope.add(n.id);
-    // Il diario generale (briefing, giornate) non fa parte della memoria di un progetto
+    // La memoria di un progetto è ciò che il progetto riferisce (collegamenti in uscita dalla sua cartella,
+    // due passaggi) più le persone che lo citano. Il diario generale e le note che semplicemente elencano
+    // il progetto restano fuori.
     const esterna = (n: Node) => n.folder === "Diario";
+    frontier = new Set(inScope);
     for (let hop = 0; hop < 2; hop++) {
       const next = new Set<string>();
       for (const e of edges) {
         if (frontier.has(e.a.id) && !inScope.has(e.b.id) && !esterna(e.b)) next.add(e.b.id);
-        if (frontier.has(e.b.id) && !inScope.has(e.a.id) && !esterna(e.a)) next.add(e.a.id);
       }
       for (const id of next) inScope.add(id);
       frontier = next;
+    }
+    for (const e of edges) {
+      if (inScope.has(e.b.id) && e.a.folder === "Persone") inScope.add(e.a.id);
     }
   }
 
