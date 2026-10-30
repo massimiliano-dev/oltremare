@@ -156,7 +156,8 @@ fn sistema(agent: &Agent, s: &Settings, istruzioni_server: &[(String, String)]) 
 - Prima di rispondere su persone, progetti, preferenze o cose già fatte, cerca in memoria (memoria_cerca, memoria_leggi).\n\
 - Quando impari qualcosa di stabile e utile in futuro (preferenze, persone e ruoli, decisioni, stato dei progetti, procedure), salvalo con memoria_scrivi: \
 una nota per argomento, collegamenti [[Nota]] tra note correlate, aggiungi a una nota esistente invece di crearne un doppione. Dillo in una frase quando salvi.\n\
-- Non salvare chiacchiere, password, chiavi, dati bancari o email copiate per intero.\n",
+- Non salvare chiacchiere, password, chiavi, dati bancari o email copiate per intero.\n\
+- Il diario del giorno (cartella Diario) e le note «Lavori <giorno>» dei progetti li scrive Oltremare da solo: non aggiungerci voci.\n",
             tools::percorsi::mostra(&dir)
         ));
         let c = crate::memoria::contesto(&dir);
