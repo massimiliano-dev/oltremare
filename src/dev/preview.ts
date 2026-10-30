@@ -306,6 +306,18 @@ export function installPreview() {
         case "memory_open": return null;
         case "memory_seed": return 82;
         case "studio_review": return { session: "rev1" };
+        case "studio_agents":
+          return [
+            { name: "oltremare-backend", description: "Sviluppatore backend senior per API, logica di dominio, accesso ai dati, migrazioni, integrazioni.", oltremare: true, project: false },
+            { name: "oltremare-frontend", description: "Sviluppatore frontend senior con occhio da designer: interfacce, componenti, stile, accessibilità, copy.", oltremare: true, project: false },
+          ];
+        case "studio_team": {
+          const t0 = now - 95_000;
+          return { session: "s1", running: true, agents: [
+            { toolUseId: "t1", agentId: "a1", type: "oltremare-backend", description: "Modulo sconti con validazione dei codici", prompt: "Crea src/sconti.ts con applicaSconto(lordo, codice) e la tabella dei codici; valida i codici sconosciuti; test in tests/sconti.test.ts.", startedAt: t0, endedAt: t0 + 61_000, running: false, report: "Creato `src/sconti.ts` con `applicaSconto` e `CODICI`; codici sconosciuti → sconto 0. Test in `tests/sconti.test.ts`: 3 casi, tutti verdi (`npm test`).", steps: [{ tool: "Read", title: "src/carrello.ts" }, { tool: "Write", title: "src/sconti.ts" }, { tool: "Write", title: "tests/sconti.test.ts" }, { tool: "Bash", title: "npm test -- sconti" }], toolUses: 6, tokens: 24110, durationMs: 61_000 },
+            { toolUseId: "t2", agentId: "a2", type: "oltremare-frontend", description: "Campo codice sconto nel carrello", prompt: "In src/components/Carrello.svelte aggiungi un campo per il codice sconto accanto al totale, con stato di errore se il codice non è valido.", startedAt: t0 + 2000, endedAt: null, running: true, report: "", progress: "Sto aggiungendo lo stato di errore e lo stile del campo.", steps: [{ tool: "Skill", title: "impeccable" }, { tool: "Read", title: "src/components/Carrello.svelte" }, { tool: "Edit", title: "src/components/Carrello.svelte" }], toolUses: 4, tokens: null },
+          ] };
+        }
         case "studio_review_result":
           return { esito: "da correggere", voto: 6, sintesi: "Buona struttura, ma lo sconto si applica anche a importi negativi e manca il test del codice non valido.", testo: "", problemi: [
             { gravita: "importante", file: "src/sconti.ts", riga: 3, problema: "applicaSconto accetta importi negativi e restituisce un totale negativo.", correzione: "Limita il lordo a 0 prima di applicare la percentuale." },

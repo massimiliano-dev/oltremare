@@ -14,7 +14,7 @@ use tokio_util::sync::CancellationToken;
 const CONSENTITI: &[&str] = &[
     "Read", "Glob", "Grep", "Edit", "Write", "MultiEdit", "NotebookEdit", "TodoWrite", "WebFetch", "WebSearch",
     // Sotto-agenti: lavorano in parallelo nella stessa sessione, l'agente principale coordina e verifica
-    "Agent", "Task",
+    "Agent", "Task", "Skill",
     "Bash(npm run:*)", "Bash(npm test:*)", "Bash(npm install:*)", "Bash(npm ci:*)", "Bash(npx:*)", "Bash(pnpm:*)", "Bash(yarn:*)", "Bash(bun:*)",
     "Bash(node:*)", "Bash(tsc:*)", "Bash(cargo:*)", "Bash(go:*)", "Bash(python3:*)", "Bash(pytest:*)", "Bash(dotnet:*)", "Bash(swift:*)", "Bash(xcodebuild:*)",
     "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git add:*)", "Bash(git commit:*)", "Bash(git checkout:*)",
@@ -23,6 +23,10 @@ const CONSENTITI: &[&str] = &[
 ];
 /// Mai senza una richiesta esplicita dell'utente: si fanno da Oltremare, con approvazione.
 const VIETATI: &[&str] = &["Bash(git push:*)", "Bash(sudo:*)", "Bash(rm -rf:*)", "Bash(npm publish:*)", "Bash(cargo publish:*)", "Bash(gh pr merge:*)"];
+
+pub(crate) fn titolo_breve(input: &Value) -> String {
+    breve(input)
+}
 
 fn breve(input: &Value) -> String {
     let o = input.as_object();
@@ -111,7 +115,7 @@ pub struct Opzioni {
 
 /// Strumenti per chi deve solo leggere e verificare (il CTO che rivede, un secondo parere)
 const SOLO_LETTURA: &[&str] = &[
-    "Read", "Glob", "Grep", "WebFetch", "WebSearch", "TodoWrite", "Agent", "Task",
+    "Read", "Glob", "Grep", "WebFetch", "WebSearch", "TodoWrite", "Agent", "Task", "Skill",
     "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)",
     "Bash(npm test:*)", "Bash(npm run test:*)", "Bash(npm run lint:*)", "Bash(npm run check:*)", "Bash(npm run build:*)", "Bash(npx vitest:*)", "Bash(npx jest:*)", "Bash(npx tsc:*)", "Bash(npx eslint:*)", "Bash(npx svelte-check:*)",
     "Bash(cargo test:*)", "Bash(cargo check:*)", "Bash(cargo clippy:*)", "Bash(go test:*)", "Bash(go vet:*)", "Bash(pytest:*)", "Bash(python3 -m pytest:*)", "Bash(dotnet test:*)", "Bash(swift test:*)",
@@ -767,6 +771,7 @@ pub async fn avvia_headless_con(app: &AppHandle, cartella: &Path, messaggio: &st
     }
     let s = app.state::<App>().store.settings();
     let bin = crate::providers::claude_code::trova(&s.claude_code_path).ok_or("Claude Code non è installato su questo computer (claude.com/download)")?;
+    crate::squadra::installa_agenti();
     let mut cmd = comando_headless_con(&bin, cartella, messaggio, sessione.as_deref(), &s, &o);
     #[cfg(unix)]
     cmd.process_group(0);

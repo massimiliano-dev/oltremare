@@ -19,6 +19,7 @@ mod providers;
 mod shell_env;
 mod sidecar;
 mod store;
+mod squadra;
 mod studio;
 mod terminale;
 mod tools;
@@ -967,6 +968,8 @@ pub fn run() {
             studio::studio_classify,
             studio::studio_claudex,
             studio::studio_review,
+            squadra::studio_team,
+            squadra::studio_agents,
             studio::memory_seed,
             studio::studio_review_result,
             studio::studio_run,

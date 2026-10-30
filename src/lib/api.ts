@@ -201,6 +201,38 @@ export interface StudioDecision {
   source: string;
 }
 
+export interface TeamAgent {
+  toolUseId: string;
+  agentId?: string;
+  type: string;
+  description: string;
+  prompt: string;
+  startedAt: number;
+  endedAt: number | null;
+  lastAt?: number;
+  running: boolean;
+  error?: boolean;
+  report: string;
+  progress?: string;
+  steps: { tool: string; title: string }[];
+  toolUses: number;
+  tokens: number | null;
+  durationMs?: number | null;
+}
+
+export interface TeamInfo {
+  session: string | null;
+  running: boolean;
+  agents: TeamAgent[];
+}
+
+export interface AgentDef {
+  name: string;
+  description: string;
+  oltremare: boolean;
+  project: boolean;
+}
+
 export interface StudioReview {
   esito: "approvato" | "da correggere" | "sconosciuto";
   voto: number | null;
@@ -588,6 +620,8 @@ export const api = {
   studioOpen: (project?: string, prompt?: string) => invoke<void>("studio_open", { project, prompt }),
   studioClassify: (project: string, text: string) => invoke<StudioDecision>("studio_classify", { project, text }),
   studioClaudex: () => invoke<ClaudexInfo>("studio_claudex"),
+  studioTeam: (project: string, session?: string | null) => invoke<TeamInfo>("studio_team", { project, session: session ?? undefined }),
+  studioAgents: (project: string) => invoke<AgentDef[]>("studio_agents", { project }),
   studioReview: (project: string, text: string, model: string, profile?: string) => invoke<{ session: string }>("studio_review", { project, text, model, profile }),
   studioReviewResult: (project: string, session: string) => invoke<StudioReview>("studio_review_result", { project, session }),
   studioRun: (project: string, text: string, model: string, plan: boolean, profile?: string, session?: string, newSession?: boolean) =>

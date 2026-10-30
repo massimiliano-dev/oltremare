@@ -1,6 +1,6 @@
 // Uno spazio di lavoro dello Studio: un progetto aperto in una scheda, con il suo albero dei file,
 // il suo git, l'editor, l'orchestratore (compiti, coda, revisione del CTO) e la memoria del progetto.
-import { api, errorText, type StudioDecision, type StudioProject, type StudioReview } from "../api";
+import { api, errorText, type AgentDef, type StudioDecision, type StudioProject, type StudioReview, type TeamInfo } from "../api";
 import { DevState } from "./dev.svelte";
 import { GitStore } from "./git.svelte";
 import { ui } from "./ui.svelte";
@@ -102,6 +102,11 @@ export class Workspace {
   fresh = $state(false);
   /** Messaggi scritti mentre Claude lavora: partono in ordine, nella stessa sessione, appena finisce */
   queue = $state<{ id: number; text: string }[]>([]);
+  /** La squadra al lavoro: sotto-agenti della sessione corrente, letti ogni pochi secondi */
+  team = $state<TeamInfo | null>(null);
+  /** Gli agenti definiti (di Oltremare e dell'utente) */
+  agentDefs = $state<AgentDef[]>([]);
+  private timers: ReturnType<typeof setInterval>[] = [];
   private taskId = 0;
   private queueId = 0;
 
@@ -109,6 +114,7 @@ export class Workspace {
   lastTask = $derived(this.tasks.at(-1) ?? null);
   /** Claude (o il CTO) lavora, o c'è un piano da approvare: i nuovi messaggi aspettano */
   busy = $derived(!!this.dev.session?.running || ["deciding", "planning", "working", "plan-ready", "reviewing"].includes(this.tasks.at(-1)?.phase ?? ""));
+  activeAgents = $derived(this.team?.agents.filter((a) => a.running).length ?? 0);
 
   constructor(project: StudioProject) {
     this.project = project;
@@ -125,11 +131,23 @@ export class Workspace {
     this.dev.start();
     this.dev.watch();
     this.git.start(this.project.path);
+    this.refreshTeam();
+    this.timers.push(setInterval(() => this.refreshTeam(), 3000));
+    api.studioAgents(this.path).then((a) => (this.agentDefs = a)).catch(() => {});
   }
 
   stop() {
+    for (const t of this.timers) clearInterval(t);
+    this.timers = [];
     this.dev.stop();
     this.git.stop();
+  }
+
+  async refreshTeam() {
+    const prima = this.activeAgents;
+    this.team = await api.studioTeam(this.path, this.dev.sessionId ?? this.dev.session?.id).catch(() => null);
+    // Appena il senior divide il lavoro, se non stai guardando un file, la Squadra si apre da sola
+    if (!prima && this.activeAgents && this.dev.tab === "file" && !this.files.length) this.dev.tab = "team";
   }
 
   // ---------- Editor ----------

@@ -14,7 +14,7 @@ export class DevState {
   tree = $state<Record<string, DevEntry[]>>({});
   expanded = $state<Record<string, boolean>>({});
   file = $state<DevFile | null>(null);
-  tab = $state<"file" | "diff" | "preview">("file");
+  tab = $state<"file" | "diff" | "preview" | "team">("file");
   diff = $state("");
   diffFile = $state<string | null>(null);
   git = $state<DevGit | null>(null);

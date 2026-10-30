@@ -8,6 +8,7 @@
   import SourceControl from "./SourceControl.svelte";
   import DiffViewer from "./DiffViewer.svelte";
   import Terminal from "./Terminal.svelte";
+  import Team from "./Team.svelte";
   import { setContext } from "svelte";
   import type { Workspace as WS } from "../state/workspace.svelte";
 
@@ -128,6 +129,7 @@
       {/each}
       <div class="tab" class:on={ws.dev.tab === "diff"}><button class="tname" onclick={() => ws.git.showDiff(ws.git.diffFile, ws.git.diffStaged)}><Icon name="layers" size={12} /> Differenze{#if ws.git.changed.length + ws.git.staged.length}<span class="tcount">{ws.git.changed.length + ws.git.staged.length}</span>{/if}</button></div>
       <div class="tab" class:on={ws.dev.tab === "preview"}><button class="tname" onclick={() => (ws.dev.tab = "preview")}><Icon name="globe" size={12} /> Anteprima{ws.dev.urls.length ? ` · ${ws.dev.urls.length}` : ""}</button></div>
+      <div class="tab" class:on={ws.dev.tab === "team"}><button class="tname" onclick={() => (ws.dev.tab = "team")}><Icon name="users" size={12} /> Squadra{#if ws.activeAgents}<span class="tcount live">{ws.activeAgents}</span>{/if}</button></div>
       <span class="tsp"></span>
       <button class="tterm" onclick={() => (terms.length ? (ws.dev.bottom = `term:${(terms.find((t) => t.id === termSel) ?? terms.at(-1))!.id}`, (bottomOpen = true)) : nuovoTerminale())} title="Terminale nella cartella del progetto (⌃`)"><Icon name="terminal" size={13} /> Terminale</button>
     </div>
@@ -149,6 +151,8 @@
         {/if}
       {:else if ws.dev.tab === "diff"}
         <DiffViewer />
+      {:else if ws.dev.tab === "team"}
+        <Team />
       {:else}
         {#if ws.dev.urls.length}
           <div class="urlbar">
@@ -264,6 +268,16 @@
   }
   .sec :global(svg) {
     color: var(--accent);
+  }
+  .tcount.live {
+    color: var(--ok);
+    background: color-mix(in oklch, var(--ok) 16%, transparent);
+    animation: beat 1.1s ease-in-out infinite;
+  }
+  @keyframes beat {
+    50% {
+      opacity: 0.45;
+    }
   }
   .tcount {
     min-width: 17px;
