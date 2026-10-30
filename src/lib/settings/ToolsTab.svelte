@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import Icon from "../Icon.svelte";
-  import { api, errorText, type McpServer, type MemoryInfo } from "../api";
+  import { api, errorText, type McpServer, type MemoryInfo, type ClaudePlugin } from "../api";
+  import { copia } from "../clipboard";
   import { settings } from "../state/settings.svelte";
   import { mcp } from "../state/mcp.svelte";
   import { ui } from "../state/ui.svelte";
@@ -14,6 +15,7 @@
   let secrets = $state<Record<string, { headers: boolean; env: boolean }>>({});
   let importing = $state(false);
   let mem = $state<MemoryInfo | null>(null);
+  let plugins = $state<ClaudePlugin[]>([]);
 
   async function loadMemory() {
     mem = await api.memoryInfo().catch(() => null);
@@ -51,6 +53,7 @@
 
   onMount(async () => {
     loadMemory();
+    api.claudePlugins().then((p) => (plugins = p)).catch(() => {});
     editors = await api.editors().catch(() => []);
     for (const x of s.mcpServers) secrets[x.id] = await api.mcpSecretHas(x.id).catch(() => ({ headers: false, env: false }));
   });
@@ -140,6 +143,33 @@
       <small class="help">Una nota per ogni progetto, con una prima stesura di «Com'è fatto» (tecnologie, cartelle, comandi). Le note già complete non si toccano.</small>
     </div>
   {/if}
+</section>
+
+<section>
+  <div class="head">
+    <h3>Plugin di Claude Code</h3>
+    <button class="btn btn-quiet sm" onclick={() => api.claudePlugins().then((p) => (plugins = p)).catch(() => {})}><Icon name="refresh" size={13} /> Ricontrolla</button>
+  </div>
+  <p class="help">Strumenti che lo Studio sa usare se sono installati in Claude Code (valgono anche per te nel terminale). L'installazione la lanci tu: i comandi si copiano con un clic.</p>
+  {#each plugins as p (p.id)}
+    <div class="srv" class:off={!p.installed}>
+      <span class="dot" class:ok={p.installed && p.cliOk} class:bad={p.installed && !p.cliOk}></span>
+      <span class="who">
+        <strong>{p.name}</strong>
+        <small>{p.description}</small>
+        {#if !p.installed}
+          <code class="cmd">{p.commands.join(" && ")}</code>
+        {:else if !p.cliOk}
+          <small class="warn">Plugin installato, ma manca «{p.cli}» sul Mac.</small>
+        {/if}
+      </span>
+      {#if !p.installed}
+        <button class="btn btn-line sm" onclick={() => copia(p.commands.join(" && "), "Comando")} title="Copia i comandi da lanciare nel Terminale"><Icon name="copy" size={13} /> Copia</button>
+      {:else}
+        <small class="okt">installato</small>
+      {/if}
+    </div>
+  {/each}
 </section>
 
 <section>
@@ -332,6 +362,28 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .who .cmd {
+    margin-top: 4px;
+    padding: 3px 7px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    color: var(--ink-2);
+    background: var(--paper-2);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  .who .warn {
+    color: var(--warn-ink);
+    white-space: normal;
+  }
+  .okt {
+    flex: none;
+    font-size: var(--t-xs);
+    font-weight: 650;
+    color: var(--ok);
   }
   .form {
     display: grid;

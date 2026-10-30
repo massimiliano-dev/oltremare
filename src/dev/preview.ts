@@ -305,6 +305,12 @@ export function installPreview() {
           return { enabled: true, path: "/Users/demo/Desktop/Obsidian", ready: true, notes: 23, obsidian: true, projectNote: a.project ? "/Users/demo/Desktop/Obsidian/Progetti/negozio.md" : null, suggested: null };
         case "memory_open": return null;
         case "memory_seed": return 82;
+        case "claude_plugins":
+          return [
+            { id: "ponytail", name: "Ponytail", description: "Fa scrivere meno codice.", installed: true, marketplace: true, cli: "", cliOk: true, commands: [] },
+            { id: "mattpocock-skills", name: "Wayfinder", description: "Pianifica lavori grandi come mappa di decisioni.", installed: false, marketplace: true, cli: "", cliOk: true, commands: ["claude plugin marketplace add mattpocock/skills", "claude plugin install mattpocock-skills@mattpocock"] },
+            { id: "open-code-review", name: "Open Code Review", description: "Revisione del codice con regole.", installed: true, marketplace: true, cli: "ocr", cliOk: false, commands: [] },
+          ];
         case "memory_graph": {
           const P = ["Persone/Anna Bianchi", "Persone/Luca Verdi", "Persone/Giulia Neri", "Progetti/negozio", "Progetti/Cobalto", "Progetti/Oltremare", "Argomenti/Deploy su Vercel", "Argomenti/Convenzioni commit", "Argomenti/Sconti e promozioni", "Diario/2026-10-29", "Diario/2026-10-30", "Oltremare", "Preferenze"];
           const nodes: { id: string; title: string; folder: string; group?: string; size: number; updated: string | null; missing?: boolean }[] = P.map((p) => ({ id: p + ".md", title: p.split("/").pop() ?? p, folder: p.includes("/") ? p.split("/")[0] : "", group: p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "", size: 400 + (p.length * 97) % 3000, updated: "2026-10-30" }));

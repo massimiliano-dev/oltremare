@@ -253,3 +253,31 @@ mod prove {
         }
     }
 }
+
+/// I plugin di Claude Code che Oltremare sa usare: quali sono installati e come si installano.
+#[tauri::command]
+pub fn claude_plugins() -> Vec<Value> {
+    let home = crate::shell_env::home().unwrap_or_default();
+    let installati = std::fs::read_to_string(home.join(".claude/plugins/installed_plugins.json")).unwrap_or_default();
+    let settings = std::fs::read_to_string(home.join(".claude/settings.json")).unwrap_or_default();
+    let marketplaces = std::fs::read_to_string(home.join(".claude/plugins/known_marketplaces.json")).unwrap_or_default();
+    let ha = |nome: &str| installati.contains(&format!("\"{nome}@")) || settings.contains(&format!("\"{nome}@"));
+    let mk = |nome: &str| marketplaces.contains(&format!("\"{nome}\""));
+    [
+        ("ponytail", "Ponytail", "Fa scrivere meno codice: regole del «senior più pigro» in ogni sessione, più /ponytail-review sul diff.", "ponytail", "DietrichGebert/ponytail", "ponytail@ponytail", ""),
+        ("mattpocock-skills", "Wayfinder (skill di Matt Pocock)", "Pianifica lavori troppo grandi per una sessione come mappa di decisioni sul tracker: nello Studio scrivi «/wayfinder …».", "mattpocock", "mattpocock/skills", "mattpocock-skills@mattpocock", ""),
+        ("open-code-review", "Open Code Review (Alibaba)", "Revisione del codice con regole: il CTO la usa in modalità delega. Serve anche la CLI: npm install -g @alibaba-group/open-code-review", "open-code-review", "alibaba/open-code-review", "open-code-review@open-code-review", "ocr"),
+        ("omniroute", "OmniRoute", "Gateway AI locale con molti provider e fallback, collegato via MCP. Serve OmniRoute in esecuzione: npm install -g omniroute, poi «omniroute».", "omniroute-claude-plugin", "projectsaibg/omniroute-claude-plugin", "omniroute@omniroute-claude-plugin", "omniroute"),
+    ]
+    .into_iter()
+    .map(|(id, nome, desc, mp, sorgente, pacchetto, cli)| {
+        let cli_ok = cli.is_empty() || crate::shell_env::path_utente().split(':').any(|d| Path::new(d).join(cli).is_file()) || home.join(".local/bin").join(cli).is_file();
+        json!({
+            "id": id, "name": nome, "description": desc,
+            "installed": ha(id), "marketplace": mk(mp),
+            "cli": cli, "cliOk": cli_ok,
+            "commands": [format!("claude plugin marketplace add {sorgente}"), format!("claude plugin install {pacchetto}")],
+        })
+    })
+    .collect()
+}

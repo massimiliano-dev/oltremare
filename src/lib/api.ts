@@ -240,6 +240,17 @@ export interface MemoryNote {
   citata_da: string[];
 }
 
+export interface ClaudePlugin {
+  id: string;
+  name: string;
+  description: string;
+  installed: boolean;
+  marketplace: boolean;
+  cli: string;
+  cliOk: boolean;
+  commands: string[];
+}
+
 export interface AgentDef {
   name: string;
   description: string;
@@ -636,6 +647,7 @@ export const api = {
   studioClaudex: () => invoke<ClaudexInfo>("studio_claudex"),
   studioTeam: (project: string, session?: string | null) => invoke<TeamInfo>("studio_team", { project, session: session ?? undefined }),
   studioAgents: (project: string) => invoke<AgentDef[]>("studio_agents", { project }),
+  claudePlugins: () => invoke<ClaudePlugin[]>("claude_plugins"),
   studioReview: (project: string, text: string, model: string, profile?: string) => invoke<{ session: string }>("studio_review", { project, text, model, profile }),
   studioReviewResult: (project: string, session: string) => invoke<StudioReview>("studio_review_result", { project, session }),
   studioRun: (project: string, text: string, model: string, plan: boolean, profile?: string, session?: string, newSession?: boolean, attachments?: string[]) =>

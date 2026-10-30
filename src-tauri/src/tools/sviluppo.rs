@@ -15,6 +15,8 @@ const CONSENTITI: &[&str] = &[
     "Read", "Glob", "Grep", "Edit", "Write", "MultiEdit", "NotebookEdit", "TodoWrite", "WebFetch", "WebSearch",
     // Sotto-agenti: lavorano in parallelo nella stessa sessione, l'agente principale coordina e verifica
     "Agent", "Task", "Skill",
+    // Gateway OmniRoute (plugin di Claude Code), se installato: i suoi strumenti MCP
+    "mcp__omniroute", "mcp__plugin_omniroute_omniroute",
     "Bash(npm run:*)", "Bash(npm test:*)", "Bash(npm install:*)", "Bash(npm ci:*)", "Bash(npx:*)", "Bash(pnpm:*)", "Bash(yarn:*)", "Bash(bun:*)",
     "Bash(node:*)", "Bash(tsc:*)", "Bash(cargo:*)", "Bash(go:*)", "Bash(python3:*)", "Bash(pytest:*)", "Bash(dotnet:*)", "Bash(swift:*)", "Bash(xcodebuild:*)",
     "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git add:*)", "Bash(git commit:*)", "Bash(git checkout:*)",
