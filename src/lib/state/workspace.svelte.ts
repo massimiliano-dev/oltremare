@@ -103,7 +103,7 @@ export class Workspace {
   /** «Nuova conversazione»: la prossima richiesta non continua la sessione precedente */
   fresh = $state(false);
   /** Messaggi scritti mentre Claude lavora: partono in ordine, nella stessa sessione, appena finisce */
-  queue = $state<{ id: number; text: string; files: string[] }[]>([]);
+  queue = $state<{ id: number; text: string; files: string[]; follow: boolean }[]>([]);
   /** La squadra al lavoro: sotto-agenti della sessione corrente, letti ogni pochi secondi */
   team = $state<TeamInfo | null>(null);
   /** Gli agenti definiti (di Oltremare e dell'utente) */
@@ -215,19 +215,27 @@ export class Workspace {
 
   // ---------- Orchestratore ----------
 
-  async send(text: string, newSession = false, files: string[] = []) {
+  async send(text: string, newSession = false, files: string[] = [], follow = false) {
     if (!text.trim() && !files.length) return;
     if (!text.trim()) text = files.length === 1 ? "Guarda il file allegato." : "Guarda i file allegati.";
     // Un piano scartato o un lavoro fermato restano nella sessione di Claude: glielo si dice, così non li riprende
     const prec = this.tasks.at(-1);
     const annullato = !!prec && ((prec.phase === "done" && prec.dropped) || (prec.phase === "error" && prec.error === "Fermato da te"));
-    const task: Task = { id: ++this.taskId, text: text.trim(), decision: null, model: this.modelChoice, plan: this.planChoice === "yes", profile: this.profile, session: null, phase: "deciding", fixRounds: 0, files };
+    // Seguito di un lavoro appena concluso: stessa sessione, stesso modello, niente nuovo piano (salvo «Sempre piano»)
+    const seguito = follow && !newSession && !!prec && prec.phase === "done" && !prec.dropped && !!prec.session;
+    const task: Task = { id: ++this.taskId, text: text.trim(), decision: null, model: seguito && this.modelChoice === "auto" ? prec.model : this.modelChoice, plan: this.planChoice === "yes", profile: this.profile, session: null, phase: "deciding", fixRounds: 0, files };
     this.tasks = [...this.tasks, task];
-    const invio = annullato ? `[L'utente ha annullato il piano/lavoro precedente: non proseguirlo e non darlo per approvato. Questa è la nuova richiesta, da valutare da capo.]\n${task.text}` : task.text;
+    const invio = annullato
+      ? `[L'utente ha annullato il piano/lavoro precedente: non proseguirlo e non darlo per approvato. Questa è la nuova richiesta, da valutare da capo.]\n${task.text}`
+      : seguito
+        ? `[Seguito del lavoro appena concluso in questa stessa sessione: il piano era già fatto ed eseguito, non rifarlo; integra quanto segue e verifica.]\n${task.text}`
+        : task.text;
     const t = this.tasks[this.tasks.length - 1];
     try {
-      // L'orchestratore decide modello e piano se l'utente non ha scelto
-      if (this.modelChoice === "auto" || this.planChoice === "auto") {
+      if (seguito) {
+        t.decision = { kind: "media", model: t.model as StudioDecision["model"], plan: t.plan, reason: "Seguito del lavoro precedente: stessa sessione, senza nuovo piano", source: "coda" };
+      } else if (this.modelChoice === "auto" || this.planChoice === "auto") {
+        // L'orchestratore decide modello e piano se l'utente non ha scelto
         t.decision = await api.studioClassify(this.path, t.text);
         if (this.modelChoice === "auto") t.model = t.decision.model;
         if (this.planChoice === "auto") t.plan = t.decision.plan;
@@ -291,7 +299,9 @@ export class Workspace {
   }
 
   enqueue(text: string, files: string[] = []) {
-    if (text.trim() || files.length) this.queue = [...this.queue, { id: ++this.queueId, text: text.trim(), files }];
+    // Scritto mentre Claude lavora: è un seguito di quel lavoro, non una richiesta da ripianificare
+    const follow = ["working", "reviewing"].includes(this.lastTask?.phase ?? "");
+    if (text.trim() || files.length) this.queue = [...this.queue, { id: ++this.queueId, text: text.trim(), files, follow }];
   }
 
   unqueue(id: number) {
@@ -303,7 +313,7 @@ export class Workspace {
     if (this.busy || !this.queue.length) return;
     const [q, ...rest] = this.queue;
     this.queue = rest;
-    this.send(q.text, false, q.files);
+    this.send(q.text, false, q.files, q.follow);
   }
 
   /** Interrompe il lavoro in corso (o lascia il piano) e manda subito questo messaggio. */
