@@ -134,7 +134,7 @@ export class Workspace {
     this.dev.watch();
     this.git.start(this.project.path);
     this.refreshTeam();
-    this.timers.push(setInterval(() => this.refreshTeam(), 3000));
+    this.timers.push(setInterval(() => this.refreshTeam(), 2000));
     api.studioAgents(this.path).then((a) => (this.agentDefs = a)).catch(() => {});
   }
 
@@ -145,6 +145,10 @@ export class Workspace {
     this.git.stop();
   }
 
+  /** Ultima lettura della squadra (per capire se la vista è aggiornata) */
+  teamAt = $state<number | null>(null);
+  teamError = $state<string | null>(null);
+
   async refreshTeam() {
     // Conversazione nuova: niente squadra finché non parte la prima richiesta
     if (this.fresh) {
@@ -152,7 +156,13 @@ export class Workspace {
       return;
     }
     const prima = this.activeAgents;
-    this.team = await api.studioTeam(this.path, this.dev.sessionId ?? this.dev.session?.id).catch(() => null);
+    try {
+      this.team = await api.studioTeam(this.path, this.dev.sessionId ?? this.dev.session?.id);
+      this.teamError = null;
+    } catch (e) {
+      this.teamError = errorText(e);
+    }
+    this.teamAt = Date.now();
     // Appena il senior divide il lavoro, se non stai guardando un file, la Squadra si apre da sola
     if (!prima && this.activeAgents && this.dev.tab === "file" && !this.files.length) this.dev.tab = "team";
   }

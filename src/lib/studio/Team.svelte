@@ -178,6 +178,11 @@
 
   <aside class="feed" aria-label="Scambi tra gli agenti">
     <h3>Scambi</h3>
+    <p class="meta">
+      {#if ws.teamError}Lettura non riuscita: {ws.teamError}
+      {:else if ws.team}Sessione {ws.team.session ? ws.team.session.slice(0, 8) : "—"} · {ws.team.agents.length} {ws.team.agents.length === 1 ? "sotto-agente" : "sotto-agenti"} · letta alle {ws.teamAt ? new Date(ws.teamAt).toLocaleTimeString("it-IT") : "—"}
+      {:else}In attesa della prima lettura…{/if}
+    </p>
     {#if !feed.length}
       <p class="none">Nessuno scambio ancora.</p>
     {:else}
@@ -460,9 +465,14 @@
     text-transform: uppercase;
     color: var(--ink-2);
   }
-  .none {
+  .none,
+  .meta {
     font-size: var(--t-xs);
     color: var(--ink-3);
+  }
+  .meta {
+    margin: -6px 0 10px;
+    font-variant-numeric: tabular-nums;
   }
   .feed ol {
     list-style: none;
