@@ -125,6 +125,11 @@ fn collegamenti(testo: &str) -> Vec<String> {
     v
 }
 
+/// I [[collegamenti]] diventano testo semplice: nel diario del giorno briefing e rassegna non devono legare tra loro i progetti.
+pub fn senza_collegamenti(t: &str) -> String {
+    regex::Regex::new(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]").expect("regex").replace_all(t, |c: &regex::Captures| c.get(2).or(c.get(1)).map(|m| m.as_str().to_string()).unwrap_or_default()).into_owned()
+}
+
 /// Testi che non devono finire in memoria (chiavi, password, carte).
 fn sensibile(t: &str) -> bool {
     let re = regex::Regex::new(r"(?i)(sk-[a-z0-9_-]{16,}|ghp_[a-z0-9]{20,}|xox[bp]-[a-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY|\b(password|passwd|pwd)\s*[:=]\s*\S{4,}|\b(?:\d[ -]?){15,16}\b)").expect("regex");
@@ -537,6 +542,7 @@ mod prove {
         assert!(std::fs::read_to_string(dir.join("Persone/Anna Bianchi.md")).unwrap().contains("creato:"), "le proprietà restano");
         assert_eq!(std::fs::read_dir(dir.join(".trash")).unwrap().count(), 1, "la vecchia versione va in .trash");
         assert!(scrivi(&dir, "Chiavi", "la chiave è sk-ant-abcdefghijklmnopqrstuv", "crea", "").is_err());
+        assert_eq!(senza_collegamenti("vedi [[Somma]] e [[Vickey Vickey|Vickey]]"), "vedi Somma e Vickey");
         assert!(scrivi(&dir, "../fuori", "x", "crea", "").is_err() || !dir.parent().unwrap().join("fuori.md").exists());
         lavoro_progetto(&dir, "negozio", Path::new("/tmp/negozio"), "aggiungi sconti", "Fatto: sconti con test.", true).unwrap();
         lavoro_progetto(&dir, "negozio", Path::new("/tmp/negozio"), "correggi arrotondamento", "Fatto.", true).unwrap();

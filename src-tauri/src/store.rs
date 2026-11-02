@@ -320,7 +320,7 @@ Regole:\n\
 - Se una notizia è incerta o solo un rumor, dillo.\n\
 - Se in 24 ore non è successo niente di rilevante in una sezione, scrivi «niente di nuovo» invece di riempire.\n\
 - Breve: deve leggersi in due minuti.\n\
-- Chiudi con una sezione finale intitolata esattamente «## Novità tech» con i 3-5 punti che contano davvero (ognuno con il link): Oltremare la salva da sola nel Diario di oggi, tu non scrivere nel Diario."
+- Chiudi con una sezione finale intitolata esattamente «## Novità tech» con i 3-5 punti che contano davvero (ognuno con il link alla fonte, ma senza [[collegamenti]] alle note: i nomi dei progetti in chiaro): Oltremare la salva da sola nel Diario di oggi, tu non scrivere nel Diario."
             .into(),
         tools: ["web"].iter().map(|s| s.to_string()).collect(),
         voice_reply: "never".into(),
