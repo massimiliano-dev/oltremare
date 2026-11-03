@@ -1,7 +1,9 @@
 import "@fontsource-variable/instrument-sans/wght.css";
 import "@fontsource/instrument-serif/latin-400.css";
 import "@fontsource/instrument-serif/latin-400-italic.css";
+import "@fontsource-variable/figtree/wght.css";
 import "./app.css";
+import "./look-keyops.css";
 import { mount } from "svelte";
 import App from "./App.svelte";
 import CompanionApp from "./CompanionApp.svelte";

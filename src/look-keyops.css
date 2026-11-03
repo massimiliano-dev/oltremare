@@ -1,0 +1,143 @@
+/* Stile «KeyOps» (anteprima): fondo lavanda appena tinto, primario blu-violetto vivace, Figtree per il testo
+   e Bricolage Grotesque per titoli e nomi, forme morbide, superfici piatte e ombre solo per ciò che si solleva.
+   Si attiva con <html data-look="keyops">; i token sono quelli del DESIGN.md di KeyOps. */
+
+/* Bricolage per i titoli: le intestazioni di Oltremare chiedono il peso 400 del serif,
+   qui ogni peso usa il disegno a 700 (la voce dei titoli di KeyOps) */
+@font-face {
+  font-family: "KO Display";
+  src: url("@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-700-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "KO Display";
+  src: url("@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-700-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root[data-look="keyops"] {
+  --accent-h: 276;
+  --tint-h: 278;
+
+  --font-sans: "Figtree Variable", "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "KO Display", "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --t-xs: 0.75rem;
+  --t-sm: 0.8125rem;
+  --t-md: 0.875rem;
+
+  --r-sm: 7px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+
+  /* Neutri: carta lavanda (fondo), card più chiara, sidebar più scura del fondo */
+  --paper: oklch(0.985 0.006 278);
+  --paper-2: oklch(0.955 0.022 280);
+  --paper-3: oklch(0.935 0.03 278);
+  --rule: oklch(0.905 0.02 278);
+  --rule-soft: oklch(0.93 0.016 278);
+
+  --ink: oklch(0.24 0.04 280);
+  --ink-2: oklch(0.36 0.045 280);
+  --ink-3: oklch(0.47 0.035 280);
+
+  --accent: oklch(0.52 0.23 276);
+  --accent-hi: oklch(0.58 0.22 276);
+  --accent-deep: oklch(0.42 0.2 276);
+  --accent-night: oklch(0.3 0.14 276);
+  --accent-wash: oklch(0.93 0.045 278);
+  --accent-mist: oklch(0.955 0.028 278);
+  --on-accent: oklch(0.985 0.008 278);
+  --chart-1: oklch(0.52 0.23 276);
+
+  --ok: oklch(0.52 0.15 152);
+  --warn: oklch(0.6 0.14 65);
+  --warn-ink: oklch(0.46 0.12 60);
+  --danger: oklch(0.53 0.22 20);
+  --danger-wash: oklch(0.95 0.035 20);
+
+  --focus-ring: oklch(0.58 0.22 276 / 0.5);
+  /* Piatto a riposo: le card non hanno ombra, solo i fogli sollevati (Lift) */
+  --shadow-card: 0 0 0 1px var(--rule-soft);
+  --shadow-sheet: 0 10px 24px -8px oklch(0.35 0.12 278 / 0.28), 0 3px 8px -3px oklch(0.35 0.12 278 / 0.18), 0 0 0 1px var(--rule);
+
+  font-feature-settings: normal;
+}
+
+:root[data-look="keyops"][data-theme="dark"] {
+  --paper: oklch(0.2 0.025 280);
+  --paper-2: oklch(0.175 0.028 280);
+  --paper-3: oklch(0.27 0.03 280);
+  --rule: oklch(0.32 0.035 280);
+  --rule-soft: oklch(0.27 0.035 280);
+
+  --ink: oklch(0.94 0.012 280);
+  --ink-2: oklch(0.84 0.02 280);
+  --ink-3: oklch(0.74 0.03 280);
+
+  --accent: oklch(0.68 0.18 278);
+  --accent-hi: oklch(0.74 0.16 278);
+  --accent-deep: oklch(0.45 0.21 278);
+  --accent-night: oklch(0.16 0.05 278);
+  --accent-wash: oklch(0.32 0.08 278);
+  --accent-mist: oklch(0.27 0.05 280);
+  --on-accent: oklch(0.18 0.05 280);
+  --chart-1: oklch(0.68 0.18 278);
+
+  --ok: oklch(0.74 0.14 152);
+  --warn: oklch(0.8 0.13 75);
+  --warn-ink: oklch(0.85 0.12 80);
+  --danger: oklch(0.67 0.2 12);
+  --danger-wash: oklch(0.3 0.08 15);
+
+  --focus-ring: oklch(0.7 0.17 278 / 0.5);
+  --shadow-card: 0 0 0 1px var(--rule-soft);
+  --shadow-sheet: 0 12px 30px -10px oklch(0 0 0 / 0.6), 0 0 0 1px var(--rule);
+}
+
+/* Titoli in Bricolage: stretti come in KeyOps */
+:root[data-look="keyops"] :is(h1, h2, h3) {
+  letter-spacing: -0.02em;
+}
+
+/* Pulsante primario di KeyOps: ombra «Soft» a riposo, «Lift» al passaggio, pressione */
+:root[data-look="keyops"] .btn-primary {
+  box-shadow: 0 1px 2px oklch(0.35 0.08 278 / 0.08), 0 2px 8px -2px oklch(0.35 0.08 278 / 0.1);
+  transition: box-shadow 150ms cubic-bezier(0.22, 1, 0.36, 1), opacity 150ms, transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+:root[data-look="keyops"] .btn-primary:hover:not(:disabled) {
+  box-shadow: 0 10px 24px -8px oklch(0.35 0.12 278 / 0.28), 0 3px 8px -3px oklch(0.35 0.12 278 / 0.18);
+  opacity: 0.92;
+}
+:root[data-look="keyops"] :is(.btn, .icon-btn):active:not(:disabled) {
+  transform: scale(0.96);
+}
+:root[data-look="keyops"] .input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-look="keyops"] :is(.btn, .icon-btn):active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* Etichette mai in maiuscolo né spaziate (regola di KeyOps); il codice e i titoli restano com'erano */
+:root[data-look="keyops"] :not(code, pre, kbd, .cm-editor, .cm-editor *, .xterm, .xterm *) {
+  text-transform: none !important;
+}
+:root[data-look="keyops"] :not(h1, code, pre, kbd, .cm-editor, .cm-editor *, .xterm, .xterm *) {
+  letter-spacing: normal;
+}
+
+/* Nomi di agenti, progetti e schede in Bricolage (voce «Name» di KeyOps) */
+:root[data-look="keyops"] :is(.agents li strong, .rtxt strong, .card .top strong, .grid strong, .pn, .who strong) {
+  font-family: "KO Display", var(--font-sans);
+  letter-spacing: -0.015em;
+}
