@@ -404,9 +404,9 @@ fn euristica(testo: &str) -> Value {
     } else if grande {
         ("grande", "opus", true)
     } else if piccola {
-        ("piccola", "haiku", false)
+        ("piccola", "sonnet", false)
     } else {
-        ("media", "sonnet", parole > 35)
+        ("media", "opus", false)
     };
     json!({ "kind": tipo, "model": modello, "plan": piano, "reason": "valutazione rapida", "source": "euristica" })
 }
@@ -417,10 +417,10 @@ pub async fn studio_classify(handle: AppHandle, project: String, text: String, c
     let Some(bin) = crate::providers::claude_code::trova(&s.claude_code_path) else { return Ok(euristica(&text)) };
     let istr = "Sei l'orchestratore di un ambiente di sviluppo. Classifica la richiesta dell'utente e rispondi SOLO con JSON valido, senza testo attorno:\n\
 {\"kind\": \"domanda\"|\"piccola\"|\"media\"|\"grande\", \"model\": \"haiku\"|\"sonnet\"|\"opus\"|\"fable\", \"plan\": true|false, \"reason\": \"una frase in italiano\"}\n\
-Regole: domanda = chiede spiegazioni o informazioni, nessuna modifica (sonnet, plan false). \
-piccola = modifica locale e ovvia in uno o due file (haiku, plan false). \
-media = funzionalità o correzione circoscritta in pochi file (sonnet; plan true solo se ci sono scelte di progetto). \
-grande = più parti del sistema, architettura, migrazioni, nuove funzionalità ampie o ambigue (opus, plan true). \
+Regole (la qualità conta più della velocità: meglio un modello forte che un giro di correzioni): domanda = chiede spiegazioni o informazioni, nessuna modifica (sonnet, plan false). \
+piccola = modifica locale e ovvia in uno o due file (sonnet, plan false). \
+media = funzionalità o correzione circoscritta, anche in più file, o un'indagine su un problema (opus, plan false). \
+grande = più parti del sistema, architettura, migrazioni, nuove funzionalità ampie o richieste davvero aperte (opus, plan true). \
 Usa fable (il modello più capace) solo per i lavori grandi più difficili: problemi complessi da diagnosticare, algoritmi delicati, sicurezza, ragionamento molto profondo (plan true).\n\
 Se c'è una conversazione in corso, il nuovo messaggio va letto alla luce di quella: una conferma, una risposta o un'aggiunta a quanto appena detto («ok fallo», «sì», «procedi», «e anche…», una correzione) NON è ambigua né grande: ha lo stesso tipo del lavoro in corso, plan false.";
     // Il classificatore non lavora nel progetto: lì lascerebbe una sessione ogni volta, scambiata per la conversazione
@@ -836,7 +836,7 @@ mod prove {
     #[test]
     fn euristica_sceglie_modello_e_piano() {
         assert_eq!(super::euristica("come funziona il login?")["kind"], "domanda");
-        assert_eq!(super::euristica("correggi il refuso nel titolo")["model"], "haiku");
+        assert_eq!(super::euristica("correggi il refuso nel titolo")["model"], "sonnet");
         let g = super::euristica("rifai l'architettura dell'autenticazione con un nuovo modulo");
         assert_eq!(g["model"], "opus");
         assert_eq!(g["plan"], true);

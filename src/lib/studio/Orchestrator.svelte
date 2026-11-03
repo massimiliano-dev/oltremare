@@ -446,7 +446,7 @@
           <option value="no">Senza piano</option>
         </select>
       </label>
-      <label title="Revisione dopo ogni lavoro: Auto = il CTO (Sonnet) rivede tutto tranne le domande; Doppia = dopo il CTO rivede anche la migliore AI di Claudex" style="--h:{ws.reviewChoice === 'no' ? 0 : 150}">
+      <label title="Revisione dopo ogni lavoro: Auto = il CTO (Sonnet) rivede i lavori grandi e le modifiche a 6 o più file; Doppia = dopo il CTO rivede anche la migliore AI di Claudex" style="--h:{ws.reviewChoice === 'no' ? 0 : 150}">
         <Icon name="shield" size={13} />
         <select bind:value={ws.reviewChoice} aria-label="Revisione del CTO">
           <option value="auto">CTO auto</option>

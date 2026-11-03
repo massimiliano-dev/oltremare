@@ -405,7 +405,8 @@ export class Workspace {
     const cambiati = (this.git.state?.staged?.length ?? 0) + (this.git.state?.changed?.length ?? 0);
     if (!this.git.state?.repo || !cambiati) return false;
     if (this.reviewChoice === "yes") return true;
-    return t.decision?.kind !== "domanda";
+    // In automatico il CTO rivede i lavori grandi e le modifiche estese; il resto lo verifica già il senior
+    return t.decision?.kind === "grande" || cambiati >= 6;
   }
 
   /** Il CTO rivede con Sonnet (rapido); con Fable resta Fable */
