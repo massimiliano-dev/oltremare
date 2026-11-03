@@ -307,6 +307,8 @@ export function installPreview() {
         case "memory_seed": return 82;
         case "studio_permissions": return [{ id: "p1", folder: "/Users/demo/Sviluppo/negozio", tool: "Bash", title: "az containerapp delete -g rg-portale -n sbx-1234 --yes", description: "Elimina la sandbox bloccata in preparazione", input: {}, at: now }];
         case "studio_permission_answer": return true;
+        case "studio_roots": return [{ name: "Sviluppo", path: "/Users/demo/Desktop/Sviluppo" }, { name: "Personale", path: "/Users/demo/Desktop/Personale" }];
+        case "studio_create_project": return `${a.root}/${a.name}`;
         case "ide_files": return ["src/carrello.ts", "src/sconti.ts", "src/components/Carrello.svelte", "src/components/Riga.svelte", "tests/sconti.test.ts", "package.json", "README.md"];
         case "ide_search": return [{ file: "src/carrello.ts", path: "/Users/demo/Sviluppo/negozio/src/carrello.ts", line: 4, col: 10, text: "  return applicaSconto(lordo, codice);" }, { file: "src/sconti.ts", path: "/Users/demo/Sviluppo/negozio/src/sconti.ts", line: 1, col: 17, text: "export function applicaSconto(lordo: number, codice?: string) {" }];
         case "ide_create": case "ide_rename": return a.path ?? a.to;

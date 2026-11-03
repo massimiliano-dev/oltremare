@@ -323,6 +323,32 @@ pub fn semina_memoria(radici: &[(String, PathBuf)], dir: &Path) -> usize {
     n
 }
 
+/// Le radici dove si possono creare progetti (per il modulo «Nuovo progetto»).
+#[tauri::command]
+pub fn studio_roots(app: State<'_, App>) -> Vec<Value> {
+    radici(&app).into_iter().map(|(n, p)| json!({ "name": n, "path": p.to_string_lossy() })).collect()
+}
+
+/// Nuovo progetto: cartella in una delle radici dello Studio, con README e repository git.
+#[tauri::command]
+pub async fn studio_create_project(app: State<'_, App>, root: String, name: String, description: Option<String>) -> Result<String> {
+    let nome = name.trim();
+    if nome.is_empty() || nome.starts_with('.') || nome.contains(['/', '\\', ':']) || nome.contains("..") {
+        return Err(AppError::msg("Nome non valido: niente barre, punti iniziali o «..»"));
+    }
+    let radice = radici(&app).into_iter().map(|(_, p)| p).find(|p| p.to_string_lossy() == root).ok_or_else(|| AppError::msg("Cartella dei progetti non valida"))?;
+    let dir = radice.join(nome);
+    if dir.exists() {
+        return Err(AppError::msg(format!("Esiste già una cartella «{nome}» in {}", radice.display())));
+    }
+    std::fs::create_dir_all(&dir)?;
+    let descr = description.as_deref().map(str::trim).filter(|d| !d.is_empty());
+    std::fs::write(dir.join("README.md"), format!("# {nome}\n\n{}\n", descr.unwrap_or("")))?;
+    std::fs::write(dir.join(".gitignore"), "node_modules/\n.env\n.env.*\n!.env.example\ndist/\nbuild/\ntarget/\n.DS_Store\n")?;
+    let _ = tokio::process::Command::new("git").args(["init", "-q", "-b", "main"]).current_dir(&dir).env("PATH", crate::shell_env::path_utente()).status().await;
+    Ok(dir.to_string_lossy().into_owned())
+}
+
 /// Dalle impostazioni: le note di tutti i progetti, con la bozza automatica dove manca «Com'è fatto».
 #[tauri::command]
 pub async fn memory_seed(app: State<'_, App>) -> Result<usize> {

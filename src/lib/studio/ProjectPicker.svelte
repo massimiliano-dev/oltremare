@@ -3,11 +3,42 @@
   import { onMount } from "svelte";
   import Icon from "../Icon.svelte";
   import { studio } from "../state/studio.svelte";
-  import type { StudioProject } from "../api";
+  import { api, errorText, type StudioProject } from "../api";
+  import { ui } from "../state/ui.svelte";
 
   let query = $state("");
   let filter = $state<"tutti" | "Sviluppo" | "Personale" | "modifiche">("tutti");
   let search: HTMLInputElement | undefined = $state();
+  // Nuovo progetto
+  let creating = $state(false);
+  let roots = $state<{ name: string; path: string }[]>([]);
+  let nRoot = $state("");
+  let nName = $state("");
+  let nDesc = $state("");
+  let busy = $state(false);
+  let nameEl: HTMLInputElement | undefined = $state();
+  const slug = $derived(nName.trim().replace(/\s+/g, "-"));
+
+  async function nuovo() {
+    creating = true;
+    if (!roots.length) roots = await api.studioRoots().catch(() => []);
+    if (!nRoot && roots[0]) nRoot = roots[0].path;
+    requestAnimationFrame(() => nameEl?.focus());
+  }
+
+  async function crea() {
+    if (!slug || !nRoot) return;
+    busy = true;
+    try {
+      await studio.createProject(nRoot, slug, nDesc);
+      creating = false;
+      nName = nDesc = "";
+    } catch (e) {
+      ui.toast(errorText(e), "error");
+    } finally {
+      busy = false;
+    }
+  }
 
   onMount(() => {
     if (!studio.projects.length) studio.loadProjects();
@@ -71,7 +102,33 @@
         </button>
       {/each}
       <button class="refresh" onclick={() => studio.loadProjects()} disabled={studio.loading} title="Aggiorna"><Icon name="refresh" size={14} /></button>
+      <button class="newp" onclick={nuovo}><Icon name="plus" size={14} /> Nuovo progetto</button>
     </div>
+    {#if creating}
+      <form class="newform" onsubmit={(e) => (e.preventDefault(), crea())}>
+        <div class="nrow">
+          <label>
+            <span>Nome</span>
+            <input class="input" bind:this={nameEl} bind:value={nName} placeholder="mio-progetto" aria-label="Nome del progetto" />
+          </label>
+          <label>
+            <span>Dove</span>
+            <select class="input" bind:value={nRoot} aria-label="Cartella">
+              {#each roots as r (r.path)}<option value={r.path}>{r.name}</option>{/each}
+            </select>
+          </label>
+        </div>
+        <label>
+          <span>Cosa vuoi costruire <small>(facoltativo: se lo scrivi, Claude prepara subito lo scheletro)</small></span>
+          <textarea class="input" rows="3" bind:value={nDesc} placeholder="Es. un'app web per prenotare le sale riunioni, con login Microsoft e calendario"></textarea>
+        </label>
+        <div class="nact">
+          <small>{slug && nRoot ? `${nRoot.replace(/^\/Users\/[^/]+/, "~")}/${slug}` : ""}</small>
+          <button type="button" class="btn btn-quiet sm" onclick={() => (creating = false)}>Annulla</button>
+          <button type="submit" class="btn btn-primary sm" disabled={!slug || busy}>{busy ? "Creo…" : "Crea e apri"}</button>
+        </div>
+      </form>
+    {/if}
   </header>
 
   {#if studio.loading && !studio.projects.length}
@@ -187,6 +244,66 @@
     font-family: inherit;
     font-size: var(--t-xs);
     color: var(--ink-3);
+  }
+  .newp {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 13px;
+    border-radius: 999px;
+    font-size: var(--t-sm);
+    font-weight: 650;
+    color: white;
+    background: var(--accent);
+  }
+  .newp:hover {
+    filter: brightness(1.08);
+  }
+  .newform {
+    display: grid;
+    gap: 10px;
+    margin: 16px auto 0;
+    max-width: 640px;
+    padding: 16px;
+    border-radius: 16px;
+    text-align: left;
+    background: var(--paper);
+    box-shadow: 0 0 0 1px var(--rule), 0 14px 36px -18px oklch(0.3 0.12 var(--accent-h) / 0.35);
+  }
+  .newform label {
+    display: grid;
+    gap: 4px;
+    font-size: var(--t-xs);
+    font-weight: 650;
+    color: var(--ink-2);
+  }
+  .newform small {
+    font-weight: 400;
+    color: var(--ink-3);
+  }
+  .nrow {
+    display: grid;
+    grid-template-columns: 1fr 180px;
+    gap: 10px;
+  }
+  .nact {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .nact small {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .nact .sm {
+    height: 30px;
+    padding: 0 12px;
+    font-size: var(--t-sm);
   }
   .filters {
     display: flex;

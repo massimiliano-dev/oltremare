@@ -2,6 +2,7 @@
   // Lo spazio di lavoro dello Studio: esplora file, editor a schede, differenze, anteprima, processi, orchestratore.
   import Icon from "../Icon.svelte";
   import FileTree from "../dev/FileTree.svelte";
+  import FileIcon from "../dev/FileIcon.svelte";
   import CodeEditor from "./CodeEditor.svelte";
   import Orchestrator from "./Orchestrator.svelte";
   import IssuesPanel from "./IssuesPanel.svelte";
@@ -194,19 +195,45 @@
 
   <section class="center">
     <div class="tabs">
-      {#each ws.files as f (f.path)}
-        <div class="tab" class:on={ws.dev.tab === "file" && ws.active === f.path}>
-          <button class="tname" onclick={() => { ws.active = f.path; ws.dev.tab = "file"; }} title={f.path}>{f.name}{#if f.content !== f.saved}<span class="dirty">●</span>{/if}</button>
-          <button class="tx" onclick={() => ws.closeFile(f.path)} aria-label="Chiudi {f.name}"><Icon name="x" size={11} /></button>
-        </div>
-      {/each}
-      <div class="tab" class:on={ws.dev.tab === "diff"}><button class="tname" onclick={() => ws.git.showDiff(ws.git.diffFile, ws.git.diffStaged)}><Icon name="layers" size={12} /> Differenze{#if ws.git.changed.length + ws.git.staged.length}<span class="tcount">{ws.git.changed.length + ws.git.staged.length}</span>{/if}</button></div>
-      <div class="tab" class:on={ws.dev.tab === "preview"}><button class="tname" onclick={() => (ws.dev.tab = "preview")}><Icon name="globe" size={12} /> Anteprima{ws.dev.urls.length ? ` · ${ws.dev.urls.length}` : ""}</button></div>
-      <div class="tab" class:on={ws.dev.tab === "memory"}><button class="tname" onclick={() => (ws.dev.tab = "memory")}><Icon name="book" size={12} /> Memoria</button></div>
-      <div class="tab" class:on={ws.dev.tab === "team"}><button class="tname" onclick={() => (ws.dev.tab = "team")}><Icon name="users" size={12} /> Squadra{#if ws.activeAgents}<span class="tcount live">{ws.activeAgents}</span>{/if}</button></div>
-      <span class="tsp"></span>
-      <button class="tterm" onclick={() => (terms.length ? (ws.dev.bottom = `term:${(terms.find((t) => t.id === termSel) ?? terms.at(-1))!.id}`, (bottomOpen = true)) : nuovoTerminale())} title="Terminale nella cartella del progetto (⌃`)"><Icon name="terminal" size={13} /> Terminale</button>
+      <div class="ftabs" role="tablist" aria-label="File aperti">
+        {#each ws.files as f (f.path)}
+          {@const on = ws.dev.tab === "file" && ws.active === f.path}
+          {@const sporco = f.content !== f.saved}
+          <div class="ftab" class:on class:sporco role="tab" aria-selected={on}>
+            <button class="fname" onclick={() => { ws.active = f.path; ws.dev.tab = "file"; }} onauxclick={(e) => e.button === 1 && ws.closeFile(f.path)} title={rel(f.path)}>
+              <FileIcon name={f.name} />
+              <span>{f.name}</span>
+            </button>
+            <button class="fx" onclick={() => ws.closeFile(f.path)} aria-label="Chiudi {f.name}" title={sporco ? "Modifiche non salvate (⌘S) · chiudi" : "Chiudi"}>
+              <span class="dot"></span><Icon name="x" size={11} />
+            </button>
+          </div>
+        {/each}
+        {#if !ws.files.length}<span class="nofiles">Nessun file aperto · ⌘P per aprirne uno</span>{/if}
+      </div>
+      <div class="views" role="tablist" aria-label="Viste">
+        <button class:on={ws.dev.tab === "diff"} onclick={() => ws.git.showDiff(ws.git.diffFile, ws.git.diffStaged)} title="Differenze rispetto all'ultimo commit"><Icon name="layers" size={13} /><span>Differenze</span>{#if ws.git.changed.length + ws.git.staged.length}<span class="tcount">{ws.git.changed.length + ws.git.staged.length}</span>{/if}</button>
+        <button class:on={ws.dev.tab === "preview"} onclick={() => (ws.dev.tab = "preview")} title="Anteprima dell'app in esecuzione"><Icon name="globe" size={13} /><span>Anteprima</span>{#if ws.dev.urls.length}<span class="tcount ok">{ws.dev.urls.length}</span>{/if}</button>
+        <button class:on={ws.dev.tab === "memory"} onclick={() => (ws.dev.tab = "memory")} title="Memoria del progetto"><Icon name="book" size={13} /><span>Memoria</span></button>
+        <button class:on={ws.dev.tab === "team"} onclick={() => (ws.dev.tab = "team")} title="La squadra di agenti al lavoro"><Icon name="users" size={13} /><span>Squadra</span>{#if ws.activeAgents}<span class="tcount live">{ws.activeAgents}</span>{/if}</button>
+        <span class="vsep"></span>
+        <button onclick={() => (terms.length ? (ws.dev.bottom = `term:${(terms.find((t) => t.id === termSel) ?? terms.at(-1))!.id}`, (bottomOpen = true)) : nuovoTerminale())} title="Terminale nella cartella del progetto (⌃`)"><Icon name="terminal" size={13} /><span>Terminale</span></button>
+      </div>
     </div>
+    {#if ws.dev.tab === "file" && ws.current}
+      {@const parti = rel(ws.current.path).split("/")}
+      <nav class="crumbs" aria-label="Percorso del file">
+        <span class="croot">{ws.project.name}</span>
+        {#each parti as seg, i (i)}
+          <Icon name="chevron" size={10} />
+          {#if i === parti.length - 1}
+            <span class="cfile"><FileIcon name={seg} /> {seg}</span>
+          {:else}
+            <span>{seg}</span>
+          {/if}
+        {/each}
+      </nav>
+    {/if}
     <div class="pane">
       {#if ws.dev.tab === "file"}
         {#if ws.current}
@@ -226,8 +253,16 @@
           {/if}
         {:else}
           <div class="welcome">
-            <Icon name="draft" size={26} />
-            <p>Apri un file dall'esplora risorse, oppure chiedi all'orchestratore cosa fare. I file modificati da Claude compaiono in «Modifiche», pronti per il commit.</p>
+            <span class="wmark" style="--h:{ws.project.hue}">{ws.project.name.slice(0, 1).toUpperCase()}</span>
+            <h3>{ws.project.name}</h3>
+            <p>Apri un file, cerca nel progetto o chiedi all'orchestratore qui a destra. Le modifiche di Claude compaiono in «Modifiche», pronte per il commit.</p>
+            <div class="wact">
+              <button onclick={() => (ws.quickOpen = true)}><Icon name="draft" size={15} /><span>Apri un file</span><kbd>⌘P</kbd></button>
+              <button onclick={() => (ws.sidebar = "search")}><Icon name="search" size={15} /><span>Cerca nel progetto</span><kbd>⌘⇧F</kbd></button>
+              <button onclick={() => { ws.sidebar = "problems"; ws.runCheck(); }}><Icon name="alert" size={15} /><span>Controlla gli errori</span></button>
+              <button onclick={() => (terms.length ? (bottomOpen = true) : nuovoTerminale())}><Icon name="terminal" size={15} /><span>Terminale</span><kbd>⌃`</kbd></button>
+            </div>
+            <p class="whint">F12 vai alla definizione · ⌘D occorrenza successiva · ⌘+clic più cursori · ⌘S salva</p>
           </div>
         {/if}
       {:else if ws.dev.tab === "diff"}
@@ -590,54 +625,279 @@
     background: var(--rule-soft);
   }
   .center {
+    container-type: inline-size;
     min-width: 0;
     min-height: 0;
     display: flex;
     flex-direction: column;
   }
   .tabs {
+    flex: none;
     display: flex;
-    gap: 1px;
-    overflow-x: auto;
+    align-items: stretch;
+    gap: 8px;
+    height: 38px;
+    padding-right: 8px;
     background: var(--paper-2);
     border-bottom: 1px solid var(--rule-soft);
   }
-  .tab {
+  .ftabs {
+    flex: 1;
+    min-width: 0;
     display: flex;
-    align-items: center;
-    flex: none;
-    border-right: 1px solid var(--rule-soft);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .nofiles {
+    align-self: center;
+    padding: 0 14px;
+    font-size: var(--t-xs);
     color: var(--ink-3);
-  }
-  .tab.on {
-    background: var(--paper);
-    color: var(--ink);
-    box-shadow: inset 0 -2px 0 var(--accent);
-  }
-  .tname {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    height: 34px;
-    padding: 0 10px 0 12px;
-    font-size: var(--t-sm);
     white-space: nowrap;
   }
-  .dirty {
-    color: var(--accent);
-    font-size: 0.7rem;
+  .ftab {
+    position: relative;
+    flex: none;
+    display: flex;
+    align-items: center;
+    max-width: 220px;
+    border-right: 1px solid var(--rule-soft);
+    color: var(--ink-3);
+    transition: background-color 0.12s, color 0.12s;
   }
-  .tx {
+  .ftab:hover {
+    color: var(--ink-2);
+    background: color-mix(in oklch, var(--paper) 60%, transparent);
+  }
+  .ftab.on {
+    color: var(--ink);
+    background: var(--paper);
+  }
+  .ftab.on::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    background: var(--accent);
+  }
+  .ftab.on::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 1px;
+    background: var(--paper);
+  }
+  .fname {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    height: 100%;
+    padding: 0 4px 0 12px;
+    font-size: var(--t-sm);
+  }
+  .fname span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ftab.on .fname span {
+    font-weight: 550;
+  }
+  .fx {
+    position: relative;
     display: grid;
     place-items: center;
     width: 20px;
     height: 20px;
-    margin-right: 6px;
-    border-radius: 4px;
+    margin-right: 8px;
+    border-radius: 5px;
     color: var(--ink-3);
   }
-  .tx:hover {
+  .fx :global(svg) {
+    opacity: 0;
+  }
+  .ftab:hover .fx :global(svg),
+  .ftab.on .fx :global(svg),
+  .fx:focus-visible :global(svg) {
+    opacity: 1;
+  }
+  .fx .dot {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0;
+  }
+  /* Non salvato: il punto prende il posto della ×, che torna al passaggio */
+  .ftab.sporco .fx .dot {
+    opacity: 1;
+  }
+  .ftab.sporco .fx :global(svg) {
+    opacity: 0;
+  }
+  .ftab.sporco:hover .fx .dot {
+    opacity: 0;
+  }
+  .ftab.sporco:hover .fx :global(svg) {
+    opacity: 1;
+  }
+  .fx:hover {
+    background: var(--paper-3);
+    color: var(--ink);
+  }
+  .views {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .views button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 9px;
+    border-radius: 7px;
+    font-size: var(--t-xs);
+    font-weight: 600;
+    color: var(--ink-3);
+    transition: background-color 0.12s, color 0.12s;
+  }
+  .views button:hover {
+    color: var(--ink);
+    background: var(--paper-3);
+  }
+  .views button.on {
+    color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 11%, transparent);
+  }
+  .vsep {
+    width: 1px;
+    height: 18px;
+    margin: 0 4px;
+    background: var(--rule);
+  }
+  /* Colonna stretta: solo icone, tranne la vista attiva */
+  @container (max-width: 620px) {
+    .views button:not(.on) span:not(.tcount) {
+      display: none;
+    }
+  }
+  .tcount.ok {
+    color: var(--ok);
+    background: color-mix(in oklch, var(--ok) 15%, transparent);
+  }
+  .crumbs {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 28px;
+    padding: 0 16px;
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+    background: var(--paper);
+    border-bottom: 1px solid color-mix(in oklch, var(--rule-soft) 60%, transparent);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .crumbs :global(svg) {
+    flex: none;
+    opacity: 0.6;
+  }
+  .croot {
+    font-weight: 600;
+    color: var(--ink-2);
+  }
+  .cfile {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--ink);
+    font-weight: 550;
+  }
+  .welcome {
+    margin: auto;
+    max-width: 460px;
+    display: grid;
+    justify-items: center;
+    gap: 12px;
+    padding: 24px;
+    text-align: center;
+  }
+  .wmark {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: oklch(0.45 0.15 var(--h));
+    background: oklch(0.8 0.12 var(--h) / 0.3);
+  }
+  :global([data-theme="dark"]) .wmark {
+    color: oklch(0.86 0.11 var(--h));
+  }
+  .welcome h3 {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: 1.6rem;
+    color: var(--ink);
+  }
+  .welcome > p {
+    margin: 0;
+    font-size: var(--t-sm);
+    line-height: 1.55;
+    color: var(--ink-3);
+  }
+  .wact {
+    width: 100%;
+    display: grid;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .wact button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 38px;
+    padding: 0 12px;
+    border-radius: 10px;
+    font-size: var(--t-sm);
+    color: var(--ink-2);
+    text-align: left;
+    transition: background-color 0.12s, color 0.12s;
+  }
+  .wact button :global(svg) {
+    color: var(--accent);
+  }
+  .wact button span {
+    flex: 1;
+  }
+  .wact button:hover {
+    color: var(--ink);
+    background: color-mix(in oklch, var(--accent) 8%, transparent);
+  }
+  .wact kbd {
+    font-family: inherit;
+    font-size: var(--t-xs);
+    padding: 2px 7px;
+    border-radius: 6px;
+    color: var(--ink-3);
     background: var(--paper-2);
+    box-shadow: inset 0 0 0 1px var(--rule-soft);
+  }
+  .whint {
+    font-size: var(--t-xs) !important;
+    color: color-mix(in oklch, var(--ink-3) 80%, transparent) !important;
   }
   .pane {
     flex: 1;
@@ -648,17 +908,6 @@
   }
   .pane > :global(.cm) {
     flex: 1;
-  }
-  .welcome {
-    margin: auto;
-    max-width: 380px;
-    display: grid;
-    justify-items: center;
-    gap: 10px;
-    text-align: center;
-    color: var(--ink-3);
-    font-size: var(--t-sm);
-    line-height: 1.5;
   }
   .hint {
     padding: 18px;
@@ -692,27 +941,6 @@
     width: 22px;
     height: 22px;
     color: var(--ink-3);
-  }
-  .tsp {
-    flex: 1;
-  }
-  .tterm {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    margin: 0 6px;
-    padding: 0 9px;
-    height: 26px;
-    align-self: center;
-    border-radius: 7px;
-    font-size: var(--t-xs);
-    font-weight: 600;
-    color: var(--ink-3);
-  }
-  .tterm:hover {
-    color: var(--accent);
-    background: color-mix(in oklch, var(--accent) 9%, transparent);
   }
   .tpane {
     height: 260px;

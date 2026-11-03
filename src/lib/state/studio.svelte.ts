@@ -81,6 +81,16 @@ class StudioState {
     if (!this.tabs.length) this.loadProjects();
   }
 
+  /** Crea il progetto, lo apre in una scheda e, se c'è una descrizione, la passa all'orchestratore. */
+  async createProject(root: string, name: string, description: string) {
+    const path = await api.studioCreateProject(root, name, description);
+    await this.loadProjects();
+    const prompt = description.trim()
+      ? `Nuovo progetto, cartella vuota (c'è solo il README). Costruiscilo: ${description.trim()}\nScegli uno stack moderno e adatto, crea lo scheletro funzionante con i comandi di avvio, build e test, fai il primo commit e scrivi nel README come avviarlo.`
+      : undefined;
+    await this.open(path, { prompt });
+  }
+
   /** L'elenco dei progetti, con le schede che restano aperte. */
   picker() {
     this.show(null);

@@ -997,6 +997,8 @@ pub fn run() {
             mcp::studio_permission_answer,
             mcp::studio_permissions,
             studio::memory_seed,
+            studio::studio_roots,
+            studio::studio_create_project,
             studio::studio_review_result,
             studio::studio_run,
             studio::studio_plan,

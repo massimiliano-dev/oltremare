@@ -45,12 +45,29 @@
   onMount(() => {
     let disposed = false;
     (async () => {
-      const [{ EditorView, basicSetup }, { keymap }, { EditorState }, { oneDark }, { lintGutter }] = await Promise.all([
+      const [{ EditorView, basicSetup }, { keymap }, { EditorState }, { lintGutter }, { HighlightStyle, syntaxHighlighting }, { tags: t }] = await Promise.all([
         import("codemirror"),
         import("@codemirror/view"),
         import("@codemirror/state"),
-        import("@codemirror/theme-one-dark"),
         import("@codemirror/lint"),
+        import("@codemirror/language"),
+        import("@lezer/highlight"),
+      ]);
+      // Colori della sintassi dai token dell'app (variabili CSS: valgono in chiaro e in scuro)
+      const sintassi = HighlightStyle.define([
+        { tag: [t.keyword, t.controlKeyword, t.moduleKeyword, t.operatorKeyword, t.definitionKeyword], color: "var(--syn-kw)", fontWeight: "550" },
+        { tag: [t.string, t.special(t.string), t.regexp], color: "var(--syn-str)" },
+        { tag: [t.number, t.bool, t.null, t.atom], color: "var(--syn-num)" },
+        { tag: [t.comment, t.lineComment, t.blockComment, t.docComment], color: "var(--syn-com)", fontStyle: "italic" },
+        { tag: [t.function(t.variableName), t.function(t.propertyName), t.macroName], color: "var(--syn-fn)" },
+        { tag: [t.typeName, t.className, t.namespace, t.tagName], color: "var(--syn-type)" },
+        { tag: [t.propertyName, t.attributeName], color: "var(--syn-prop)" },
+        { tag: [t.definition(t.variableName)], color: "var(--syn-def)" },
+        { tag: [t.operator, t.punctuation, t.bracket, t.separator], color: "var(--syn-punct)" },
+        { tag: [t.heading], color: "var(--syn-kw)", fontWeight: "700" },
+        { tag: [t.link, t.url], color: "var(--syn-str)", textDecoration: "underline" },
+        { tag: [t.meta, t.annotation], color: "var(--syn-com)" },
+        { tag: t.invalid, color: "var(--danger)" },
       ]);
       // La parola sotto il cursore (o sotto il clic), per «vai alla definizione»
       const parola = (st: import("@codemirror/state").EditorState, pos: number) => {
@@ -59,12 +76,36 @@
       };
       if (disposed || !host) return;
       const lang = await lingua(path);
-      const chiaro = EditorView.theme({
-        "&": { height: "100%", fontSize: "12.5px", backgroundColor: "var(--paper)" },
-        ".cm-gutters": { backgroundColor: "var(--paper)", color: "var(--ink-3)", border: "none" },
-        ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "var(--accent-mist)" },
-        ".cm-scroller": { fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace", lineHeight: "1.55" },
-      });
+      const aspetto = EditorView.theme({
+        "&": { height: "100%", fontSize: "13px", backgroundColor: "var(--paper)", color: "var(--ink)" },
+        ".cm-scroller": { fontFamily: "'SF Mono', ui-monospace, Menlo, monospace", lineHeight: "1.65", fontVariantLigatures: "contextual" },
+        ".cm-content": { padding: "10px 0 40vh", caretColor: "var(--accent)" },
+        ".cm-line": { padding: "0 18px 0 4px" },
+        ".cm-gutters": { backgroundColor: "var(--paper)", color: "color-mix(in oklch, var(--ink-3) 70%, transparent)", border: "none", paddingLeft: "4px" },
+        ".cm-lineNumbers .cm-gutterElement": { padding: "0 6px 0 6px", minWidth: "32px", fontSize: "11.5px" },
+        ".cm-gutter-lint": { width: "12px" },
+        ".cm-gutter-lint .cm-gutterElement": { padding: "0 2px" },
+        ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--accent)", fontWeight: "650" },
+        ".cm-activeLine": { backgroundColor: "color-mix(in oklch, var(--accent) 5%, transparent)" },
+        ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--accent)", borderLeftWidth: "2px" },
+        "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "color-mix(in oklch, var(--accent) 22%, transparent) !important" },
+        ".cm-selectionMatch": { backgroundColor: "color-mix(in oklch, var(--accent) 12%, transparent)" },
+        "&.cm-focused .cm-matchingBracket": { backgroundColor: "color-mix(in oklch, var(--accent) 18%, transparent)", outline: "none" },
+        ".cm-foldGutter .cm-gutterElement": { color: "var(--ink-3)", padding: "0 2px", opacity: "0.6" },
+        ".cm-foldPlaceholder": { backgroundColor: "var(--paper-3)", border: "none", color: "var(--ink-2)", borderRadius: "4px", padding: "0 6px" },
+        ".cm-panels": { backgroundColor: "var(--paper-2)", color: "var(--ink)", borderColor: "var(--rule-soft)" },
+        ".cm-panels.cm-panels-top": { borderBottom: "1px solid var(--rule-soft)" },
+        ".cm-panel.cm-search": { padding: "8px 12px", fontSize: "12px" },
+        ".cm-panel.cm-search input, .cm-panel.cm-search button": { borderRadius: "6px", fontSize: "12px" },
+        ".cm-textfield": { backgroundColor: "var(--paper)", border: "1px solid var(--rule)", color: "var(--ink)", padding: "3px 6px" },
+        ".cm-button": { backgroundImage: "none", backgroundColor: "var(--paper)", border: "1px solid var(--rule)", color: "var(--ink-2)" },
+        ".cm-searchMatch": { backgroundColor: "color-mix(in oklch, var(--warn) 30%, transparent)", outline: "none" },
+        ".cm-searchMatch-selected": { backgroundColor: "color-mix(in oklch, var(--warn) 55%, transparent)" },
+        ".cm-tooltip": { backgroundColor: "var(--paper)", border: "1px solid var(--rule)", borderRadius: "8px", boxShadow: "0 8px 24px -10px oklch(0.2 0.05 270 / 0.35)" },
+        ".cm-tooltip-autocomplete > ul > li[aria-selected]": { backgroundColor: "color-mix(in oklch, var(--accent) 16%, transparent)", color: "var(--ink)" },
+        ".cm-diagnostic": { padding: "6px 10px", fontSize: "12px", borderLeftWidth: "3px" },
+        ".cm-lint-marker": { width: "0.8em", height: "0.8em" },
+      }, { dark: theme.resolved === "dark" });
       view = new EditorView({
         parent: host,
         state: EditorState.create({
@@ -87,8 +128,8 @@
                 return true;
               },
             }),
-            chiaro,
-            ...(theme.resolved === "dark" ? [oneDark] : []),
+            aspetto,
+            syntaxHighlighting(sintassi),
             ...(lang ? [lang] : []),
             EditorView.updateListener.of((u) => {
               if (u.docChanged && !applying) onchange(u.state.doc.toString());
@@ -162,6 +203,27 @@
   .cm {
     height: 100%;
     overflow: hidden;
+    /* Palette della sintassi: toni dell'app, leggibili sul fondo carta */
+    --syn-kw: oklch(0.5 0.17 300);
+    --syn-str: oklch(0.52 0.13 150);
+    --syn-num: oklch(0.55 0.15 55);
+    --syn-com: oklch(0.6 0.03 260);
+    --syn-fn: oklch(0.5 0.15 255);
+    --syn-type: oklch(0.52 0.13 200);
+    --syn-prop: oklch(0.48 0.09 230);
+    --syn-def: oklch(0.38 0.06 260);
+    --syn-punct: oklch(0.55 0.03 260);
+  }
+  :global([data-theme="dark"]) .cm {
+    --syn-kw: oklch(0.78 0.13 300);
+    --syn-str: oklch(0.8 0.12 150);
+    --syn-num: oklch(0.82 0.12 60);
+    --syn-com: oklch(0.62 0.03 260);
+    --syn-fn: oklch(0.8 0.11 250);
+    --syn-type: oklch(0.82 0.1 195);
+    --syn-prop: oklch(0.82 0.06 230);
+    --syn-def: oklch(0.9 0.03 260);
+    --syn-punct: oklch(0.7 0.03 260);
   }
   .cm :global(.cm-editor) {
     height: 100%;
