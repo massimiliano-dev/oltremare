@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use tauri::State;
 
-const VERSIONE: u32 = 1;
+const VERSIONE: u32 = 2;
 
 /// Gli agenti di Oltremare: (nome del file, contenuto).
 fn definizioni() -> Vec<(&'static str, String)> {
@@ -30,7 +30,7 @@ Competenze da far valere: contratti delle API chiari e coerenti con quelli esist
             "oltremare-frontend.md",
             format!(
                 "---\nname: oltremare-frontend\ndescription: Sviluppatore frontend senior con occhio da designer per interfacce, componenti, stile, accessibilità, stati e copy. Da usare per incarichi su schermate, componenti e CSS; non per server o database.\ntools: Read, Edit, Write, MultiEdit, Grep, Glob, Bash, WebFetch, WebSearch, TodoWrite, Skill\nmodel: inherit\nmaxTurns: 60\n---\n<!-- oltremare-agent-version: {VERSIONE} -->\n# Frontend\n\n{comune}\n\n\
-Prima di toccare l'interfaccia carica con lo strumento Skill le skill `impeccable` (design e qualità dell'interfaccia), `taste-skill` e `humanizer`, se sono installate: segui le loro indicazioni per direzione visiva, gerarchia, spaziature, stati (hover, disabilitato, caricamento, errore, vuoto), copy naturale e non robotico. Se una skill non c'è, vai avanti senza.\n\
+Obbligatorio, prima di scrivere qualsiasi interfaccia: carica con lo strumento Skill la skill `impeccable` e seguila (contesto del prodotto, direzione visiva, gerarchia, spaziature, stati hover/disabilitato/caricamento/errore/vuoto, accessibilità); carica anche `design-taste-frontend` e `humanizer` (testi naturali, non robotici) se sono installate. Niente aspetto predefinito del framework né layout generici: ogni schermata deve avere una direzione visiva riconoscibile e coerente col progetto. Alla fine, se c'è il rilevatore di impeccable (~/.claude/skills/impeccable/scripts/impeccable detect --json <file>), passalo sui file toccati e correggi ciò che segnala.\n\
 Competenze da far valere: componenti coerenti con quelli esistenti (riusali prima di crearne), token e variabili del progetto invece di valori fissi, accessibilità (tastiera, contrasto, etichette, focus visibile), responsività, nessun layout che salta durante il caricamento, testi nella lingua del prodotto. Controlla il risultato nel browser quando è possibile (Claude in Chrome, se disponibile)."
             ),
         ),
@@ -267,6 +267,8 @@ pub fn claude_plugins() -> Vec<Value> {
         ("ponytail", "Ponytail", "Fa scrivere meno codice: regole del «senior più pigro» in ogni sessione, più /ponytail-review sul diff.", "ponytail", "DietrichGebert/ponytail", "ponytail@ponytail", ""),
         ("mattpocock-skills", "Wayfinder (skill di Matt Pocock)", "Pianifica lavori troppo grandi per una sessione come mappa di decisioni sul tracker: nello Studio scrivi «/wayfinder …».", "mattpocock", "mattpocock/skills", "mattpocock-skills@mattpocock", ""),
         ("open-code-review", "Open Code Review (Alibaba)", "Revisione del codice con regole: il CTO la usa in modalità delega. Serve anche la CLI: npm install -g @alibaba-group/open-code-review", "open-code-review", "alibaba/open-code-review", "open-code-review@open-code-review", "ocr"),
+        ("taste-skill", "Taste Skill", "Regole di gusto per l'interfaccia (layout, tipografia, movimento, spaziature): il frontend la usa insieme a impeccable.", "taste-skill", "Leonxlnx/taste-skill", "taste-skill@taste-skill", ""),
+        ("humanizer", "Humanizer", "Testi dell'interfaccia e documenti senza i tic della scrittura AI.", "humanizer", "blader/humanizer", "humanizer@humanizer", ""),
         ("omniroute", "OmniRoute", "Gateway AI locale con molti provider e fallback, collegato a Claude Code come server MCP. Serve il gateway acceso (porta 20128).", "", "", "", "omniroute"),
     ]
     .into_iter()

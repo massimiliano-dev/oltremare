@@ -852,6 +852,7 @@ pub async fn avvia_headless_con(app: &AppHandle, cartella: &Path, messaggio: &st
         let cartella = cartella.to_path_buf();
         tokio::spawn(async move {
             let mut tx = Some(tx);
+            let mut ultimo: Option<(bool, String)> = None;
             let mut righe = BufReader::new(stdout).lines();
             while let Ok(Some(r)) = righe.next_line().await {
                 let Ok(v) = serde_json::from_str::<Value>(&r) else { continue };
@@ -867,8 +868,9 @@ pub async fn avvia_headless_con(app: &AppHandle, cartella: &Path, messaggio: &st
                     let _ = app.state::<App>().store.set_pref("abbonamento:limiti", info);
                 }
                 if v["type"] == "result" {
-                    *finito.lock().unwrap_or_else(|e| e.into_inner()) = Some((v["is_error"].as_bool() == Some(true), v["result"].as_str().unwrap_or_default().to_string()));
-                    let _ = app.emit("dev-session", json!({ "folder": cartella.to_string_lossy(), "done": true }));
+                    // Con sotto-agenti in background il risultato arriva più volte (al lancio e alla ripresa):
+                    // il lavoro è finito solo quando il processo esce, e conta l'ultimo
+                    ultimo = Some((v["is_error"].as_bool() == Some(true), v["result"].as_str().unwrap_or_default().to_string()));
                     // Consumi del lavoro, come per gli agenti
                     let u = &v["usage"];
                     let usage = crate::providers::Usage {
@@ -882,20 +884,23 @@ pub async fn avvia_headless_con(app: &AppHandle, cartella: &Path, messaggio: &st
                     let modello = v["modelUsage"].as_object().and_then(|m| m.iter().max_by(|a, b| a.1["costUSD"].as_f64().unwrap_or(0.0).total_cmp(&b.1["costUSD"].as_f64().unwrap_or(0.0))).map(|(k, _)| k.clone()));
                     let sessione = sid.lock().map(|x| x.clone()).unwrap_or_default();
                     let stato = if v["is_error"].as_bool() == Some(true) { "error" } else { "done" };
-                    if let Some(dir) = &memoria {
-                        let nome = crate::studio::titolo_progetto(&crate::studio::radici(&app.state::<App>()), &cartella);
-                        let _ = crate::memoria::lavoro_progetto(dir, &nome, &cartella, &richiesta, v["result"].as_str().unwrap_or_default(), stato == "done");
-                    }
                     let _ = app.state::<App>().db.registra_esterna(
                         &uuid::Uuid::new_v4().to_string(), &sessione, "studio", &titolo, stato, inizio, crate::store::now_ms(), &usage, None, modello.as_deref(), provider,
                     );
                 }
             }
             app.state::<App>().mcp.rimuovi_permessi(&permessi);
-            let mut f = finito.lock().unwrap_or_else(|e| e.into_inner());
-            if f.is_none() {
-                *f = Some((true, "Claude Code si è chiuso senza risultato".into()));
+            if let (Some(dir), Some((errore, testo))) = (&memoria, &ultimo) {
+                let nome = crate::studio::titolo_progetto(&crate::studio::radici(&app.state::<App>()), &cartella);
+                let _ = crate::memoria::lavoro_progetto(dir, &nome, &cartella, &richiesta, testo, !errore);
             }
+            {
+                let mut f = finito.lock().unwrap_or_else(|e| e.into_inner());
+                if f.is_none() {
+                    *f = Some(ultimo.take().unwrap_or((true, "Claude Code si è chiuso senza risultato".into())));
+                }
+            }
+            let _ = app.emit("dev-session", json!({ "folder": cartella.to_string_lossy(), "done": true }));
         });
     }
     HEADLESS.lock().unwrap_or_else(|e| e.into_inner()).insert(cartella.to_path_buf(), Headless { figlio: std::sync::Arc::new(tokio::sync::Mutex::new(figlio)), pid, sessione: sid, finito });
