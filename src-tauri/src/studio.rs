@@ -412,7 +412,7 @@ fn euristica(testo: &str) -> Value {
 }
 
 #[tauri::command]
-pub async fn studio_classify(handle: AppHandle, project: String, text: String) -> Result<Value> {
+pub async fn studio_classify(handle: AppHandle, project: String, text: String, context: Option<String>) -> Result<Value> {
     let s = handle.state::<App>().store.settings();
     let Some(bin) = crate::providers::claude_code::trova(&s.claude_code_path) else { return Ok(euristica(&text)) };
     let istr = "Sei l'orchestratore di un ambiente di sviluppo. Classifica la richiesta dell'utente e rispondi SOLO con JSON valido, senza testo attorno:\n\
@@ -421,13 +421,17 @@ Regole: domanda = chiede spiegazioni o informazioni, nessuna modifica (sonnet, p
 piccola = modifica locale e ovvia in uno o due file (haiku, plan false). \
 media = funzionalità o correzione circoscritta in pochi file (sonnet; plan true solo se ci sono scelte di progetto). \
 grande = più parti del sistema, architettura, migrazioni, nuove funzionalità ampie o ambigue (opus, plan true). \
-Usa fable (il modello più capace) solo per i lavori grandi più difficili: problemi complessi da diagnosticare, algoritmi delicati, sicurezza, ragionamento molto profondo (plan true).";
+Usa fable (il modello più capace) solo per i lavori grandi più difficili: problemi complessi da diagnosticare, algoritmi delicati, sicurezza, ragionamento molto profondo (plan true).\n\
+Se c'è una conversazione in corso, il nuovo messaggio va letto alla luce di quella: una conferma, una risposta o un'aggiunta a quanto appena detto («ok fallo», «sì», «procedi», «e anche…», una correzione) NON è ambigua né grande: ha lo stesso tipo del lavoro in corso, plan false.";
     // Il classificatore non lavora nel progetto: lì lascerebbe una sessione ogni volta, scambiata per la conversazione
     let scratch = handle.state::<App>().data_dir.join("claude-code");
     let _ = std::fs::create_dir_all(&scratch);
     let mut cmd = crate::providers::claude_code::comando(&bin);
     cmd.current_dir(&scratch)
-        .args(["-p", &format!("Progetto: {project}\nRichiesta: {text}"), "--output-format", "json", "--model", "haiku", "--tools", "", "--setting-sources", "", "--strict-mcp-config", "--system-prompt", istr]);
+        .args(["-p", &match context.as_deref().filter(|c| !c.trim().is_empty()) {
+            Some(c) => format!("Progetto: {project}\nConversazione in corso:\n{c}\n\nNuovo messaggio: {text}"),
+            None => format!("Progetto: {project}\nRichiesta: {text}"),
+        }, "--output-format", "json", "--model", "haiku", "--tools", "", "--setting-sources", "", "--strict-mcp-config", "--system-prompt", istr]);
     let out = match tokio::time::timeout(Duration::from_secs(40), cmd.output()).await {
         Ok(Ok(o)) if o.status.success() => o,
         _ => return Ok(euristica(&text)),

@@ -156,6 +156,14 @@
     if (!t && !f.length) return;
     text = "";
     files = [];
+    // Piano pronto: «ok», «procedi»… lo approvano (il resto vale come indicazioni); altro testo lo fa rifare
+    const lt = ws.lastTask;
+    if (lt?.phase === "plan-ready" && !f.length && !ws.dev.session?.running) {
+      const m = t.match(/^(ok|okay|si|sì|va bene|vai|procedi|fallo|fallo tu|fai tu|esegui|approvo|confermo|perfetto|go)\b[\s,.!:;-]*/i);
+      if (m) ws.approve(lt, t.slice(m[0].length).trim() || undefined);
+      else ws.replan(lt, t);
+      return;
+    }
     // Claude sta lavorando (o c'è già una coda): il messaggio aspetta il suo turno
     if (ws.busy || ws.queue.length) {
       ws.enqueue(t, f);

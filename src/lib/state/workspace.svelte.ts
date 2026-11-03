@@ -230,8 +230,11 @@ export class Workspace {
     // Un piano scartato o un lavoro fermato restano nella sessione di Claude: glielo si dice, così non li riprende
     const prec = this.tasks.at(-1);
     const annullato = !!prec && ((prec.phase === "done" && prec.dropped) || (prec.phase === "error" && prec.error === "Fermato da te"));
-    // Seguito di un lavoro appena concluso: stessa sessione, stesso modello, niente nuovo piano (salvo «Sempre piano»)
-    const seguito = follow && !newSession && !!prec && prec.phase === "done" && !prec.dropped && !!prec.session;
+    // Seguito di un lavoro appena concluso: stessa sessione, stesso modello, niente nuovo piano (salvo «Sempre piano»).
+    // Vale per i messaggi accodati e per le risposte brevi («ok fallo», «sì», «procedi»…) nella stessa conversazione.
+    const inConversazione = !newSession && !this.fresh && !!prec && !prec.dropped && !!prec.session && ["done", "review-ready", "error"].includes(prec.phase);
+    const breve = /^(ok|okay|si|sì|va bene|vai|procedi|fallo|fallo tu|fai tu|esegui|continua|perfetto|certo|confermo|approvo|go|yes)\b/i.test(text.trim()) || text.trim().split(/\s+/).length <= 4;
+    const seguito = inConversazione && (follow || breve);
     const task: Task = { id: ++this.taskId, text: text.trim(), decision: null, model: seguito && this.modelChoice === "auto" ? prec.model : this.modelChoice, plan: this.planChoice === "yes", profile: this.profile, session: null, phase: "deciding", fixRounds: 0, files };
     this.tasks = [...this.tasks, task];
     const invio = annullato
@@ -245,7 +248,7 @@ export class Workspace {
         t.decision = { kind: "media", model: t.model as StudioDecision["model"], plan: t.plan, reason: "Seguito del lavoro precedente: stessa sessione, senza nuovo piano", source: "coda" };
       } else if (this.modelChoice === "auto" || this.planChoice === "auto") {
         // L'orchestratore decide modello e piano se l'utente non ha scelto
-        t.decision = await api.studioClassify(this.path, t.text);
+        t.decision = await api.studioClassify(this.path, t.text, inConversazione ? this.contesto(prec!) : undefined);
         if (this.modelChoice === "auto") t.model = t.decision.model;
         if (this.planChoice === "auto") t.plan = t.decision.plan;
       }
@@ -262,6 +265,12 @@ export class Workspace {
       t.error = errorText(e);
       this.drain();
     }
+  }
+
+  /** Il filo della conversazione per l'orchestratore: la richiesta precedente e l'ultima risposta di Claude. */
+  private contesto(prec: Task) {
+    const ultima = [...(this.dev.session?.items ?? [])].reverse().find((i) => i.kind === "text")?.text ?? "";
+    return `Richiesta precedente: ${prec.text.slice(0, 600)}\nUltima risposta di Claude: ${ultima.slice(0, 1200)}`;
   }
 
   /** Compiti e conversazione salvati per progetto: nelle preferenze dell'app (durano ai riavvii) e nel webview. */
