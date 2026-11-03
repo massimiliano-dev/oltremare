@@ -418,8 +418,11 @@ piccola = modifica locale e ovvia in uno o due file (haiku, plan false). \
 media = funzionalità o correzione circoscritta in pochi file (sonnet; plan true solo se ci sono scelte di progetto). \
 grande = più parti del sistema, architettura, migrazioni, nuove funzionalità ampie o ambigue (opus, plan true). \
 Usa fable (il modello più capace) solo per i lavori grandi più difficili: problemi complessi da diagnosticare, algoritmi delicati, sicurezza, ragionamento molto profondo (plan true).";
+    // Il classificatore non lavora nel progetto: lì lascerebbe una sessione ogni volta, scambiata per la conversazione
+    let scratch = handle.state::<App>().data_dir.join("claude-code");
+    let _ = std::fs::create_dir_all(&scratch);
     let mut cmd = crate::providers::claude_code::comando(&bin);
-    cmd.current_dir(&project)
+    cmd.current_dir(&scratch)
         .args(["-p", &format!("Progetto: {project}\nRichiesta: {text}"), "--output-format", "json", "--model", "haiku", "--tools", "", "--setting-sources", "", "--strict-mcp-config", "--system-prompt", istr]);
     let out = match tokio::time::timeout(Duration::from_secs(40), cmd.output()).await {
         Ok(Ok(o)) if o.status.success() => o,

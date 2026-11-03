@@ -52,8 +52,10 @@ pub fn primo_messaggio(file: &Path) -> String {
         .unwrap_or_default()
 }
 
+/// Sessioni di servizio, non conversazioni: revisioni e vecchie classificazioni dell'orchestratore.
 pub fn e_revisione(file: &Path) -> bool {
-    primo_messaggio(file).starts_with(MARCA_REVISIONE)
+    let p = primo_messaggio(file);
+    p.starts_with(MARCA_REVISIONE) || (p.starts_with("Progetto: ") && p.contains("\nRichiesta: "))
 }
 
 /// L'ultima conversazione di lavoro del progetto (le revisioni non contano).

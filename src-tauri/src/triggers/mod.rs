@@ -107,11 +107,20 @@ pub fn avvia(app: AppHandle) {
                     let Ok(sched) = cron(expr) else { continue };
                     let chiave = format!("{}#{k}", a.id);
                     let recupera = t["catchUp"].as_bool().unwrap_or(false);
-                    let da = *ultimo.entry(chiave.clone()).or_insert_with(|| if recupera { partenza - chrono::Duration::hours(12) } else { ora });
+                    // L'ultima esecuzione è salvata su disco: al riavvio non si ripete un recupero già fatto
+                    let chiave_pref = format!("cron:ultimo:{chiave}");
+                    let da = *ultimo.entry(chiave.clone()).or_insert_with(|| {
+                        st.store
+                            .pref(&chiave_pref)
+                            .and_then(|v| v.as_str().and_then(|x| chrono::DateTime::parse_from_rfc3339(x).ok()))
+                            .map(|d| d.with_timezone(&Local))
+                            .unwrap_or(if recupera { partenza - chrono::Duration::hours(12) } else { ora })
+                    });
                     if let Some(scadenza) = sched.after(&da).next() {
                         if scadenza <= ora {
                             let prompt = t["prompt"].as_str().filter(|p| !p.trim().is_empty()).unwrap_or("È il momento del tuo compito programmato: svolgilo.");
                             avvia_agente(&app, &a.id, format!("[Avvio programmato: {expr}]\n{prompt}"), "cron");
+                            let _ = st.store.set_pref(&chiave_pref, serde_json::json!(ora.to_rfc3339()));
                         }
                     }
                     ultimo.insert(chiave, ora);
