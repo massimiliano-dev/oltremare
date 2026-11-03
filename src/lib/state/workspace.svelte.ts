@@ -39,7 +39,18 @@ export interface Task {
   reviews?: { who: string; profile: string; review: StudioReview }[];
   review?: StudioReview | null;
   fixRounds?: number;
+  /** Il lavoro si è fermato sulle proposte grafiche: la prossima risposta dell'utente è la scelta */
+  proposals?: boolean;
 }
+
+/** Regola fissa dell'utente per il lavoro visivo: prima vedere come verrebbe, con più proposte. */
+const PROPOSTE = `[Lavoro grafico: PRIMA LE PROPOSTE. Non modificare ancora il codice del progetto.
+Prepara 3 proposte visive davvero diverse (direzione, composizione, tipografia, colore; non varianti di colore della stessa idea), anche se l'utente ha dato indicazioni precise: una le segue alla lettera, le altre le interpretano o le spingono oltre. Segui lo «Stile grafico» dell'utente e le skill impeccable (e design-taste-frontend se c'è); puoi lanciare in parallelo un sotto-agente oltremare-frontend per proposta.
+Ogni proposta è una pagina HTML statica in .oltremare/proposte/<AAAAMMGG-HHMM>/proposta-N.html con contenuti, font e token veri del progetto (se la schermata esiste già, ridisegna quella con i suoi dati reali); controlla che .oltremare/.gitignore contenga «*».
+Fai lo screenshot di ciascuna (1440×900, e 390×844 se il progetto è per telefono) con Chrome senza finestra: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars --window-size=1440,900 --screenshot=<file.png> file://<file.html>. Guarda le immagini e sistema ciò che non va prima di mostrarle.
+Messaggio finale: per ogni proposta il nome, due righe sull'idea e il percorso assoluto dello screenshot (l'utente vede l'anteprima). Chiudi chiedendo quale preferisce o cosa mescolare, e fermati lì.]`;
+
+const SCELTA = `[Risposta alle proposte grafiche appena mostrate in questa sessione. Se l'utente ne sceglie una (anche mescolandole o con correzioni), implementala nel progetto seguendo lo «Stile grafico» e le regole di sempre, aggiorna DESIGN.md se cambiano token, font o componenti, e verifica il risultato nel browser. Se invece chiede altre proposte o variazioni senza sceglierne una, preparane di nuove con le stesse regole e fermati di nuovo.]`;
 
 /** Il secondo revisore tra i profili di Claudex: prima GPT/Codex, poi le altre AI remote, poi i modelli locali più grandi. */
 export function secondReviewer(exclude: string): { name: string; model: string } | null {
@@ -257,17 +268,20 @@ export class Workspace {
     // Vale per i messaggi accodati e per le risposte brevi («ok fallo», «sì», «procedi»…) nella stessa conversazione.
     const inConversazione = !newSession && !this.fresh && !!prec && !prec.dropped && !!prec.session && ["done", "review-ready", "error"].includes(prec.phase);
     const breve = /^(ok|okay|si|sì|va bene|vai|procedi|fallo|fallo tu|fai tu|esegui|continua|perfetto|certo|confermo|approvo|go|yes)\b/i.test(text.trim()) || text.trim().split(/\s+/).length <= 4;
-    const seguito = inConversazione && (follow || breve);
+    // Dopo le proposte grafiche qualunque risposta è la scelta (o la richiesta di altre): stessa sessione
+    const seguito = inConversazione && (follow || breve || !!prec.proposals);
     const task: Task = { id: ++this.taskId, text: text.trim(), decision: null, model: seguito && this.modelChoice === "auto" ? prec.model : this.modelChoice, plan: this.planChoice === "yes", profile: this.profile, session: null, phase: "deciding", fixRounds: 0, files };
     this.tasks = [...this.tasks, task];
     const invio = annullato
       ? `[L'utente ha annullato il piano/lavoro precedente: non proseguirlo e non darlo per approvato. Questa è la nuova richiesta, da valutare da capo.]\n${task.text}`
-      : seguito
+      : seguito && prec.proposals
+        ? `${SCELTA}\n${task.text}`
+        : seguito
         ? `[Seguito del lavoro appena concluso in questa stessa sessione: il piano era già fatto ed eseguito, non rifarlo; integra quanto segue e verifica.]\n${task.text}`
         : task.text;
     // Come in un IDE: Claude sa quale file hai davanti e cosa hai selezionato («sistema questo», «questa funzione»)
     const contestoEditor = this.contestoEditor();
-    const daInviare = contestoEditor ? `${invio}\n\n${contestoEditor}` : invio;
+    let daInviare = contestoEditor ? `${invio}\n\n${contestoEditor}` : invio;
     const t = this.tasks[this.tasks.length - 1];
     try {
       if (seguito) {
@@ -277,6 +291,11 @@ export class Workspace {
         t.decision = await api.studioClassify(this.path, t.text, inConversazione ? this.contesto(prec!) : undefined);
         if (this.modelChoice === "auto") t.model = t.decision.model;
         if (this.planChoice === "auto") t.plan = t.decision.plan;
+      }
+      // Lavoro visivo nuovo: si parte sempre dalle proposte, senza piano (il piano viene dopo la scelta)
+      if (t.decision?.grafica && !seguito) {
+        t.plan = false;
+        daInviare = `${PROPOSTE}\n${daInviare}`;
       }
       t.phase = t.plan ? "planning" : "working";
       const nuova = newSession || this.fresh;
@@ -401,7 +420,11 @@ export class Workspace {
       this.reloadClean();
       // La nota del progetto in memoria nasce (o si aggiorna) a fine lavoro
       this.refreshMemory();
-      if (await this.wantsReview(t)) await this.startReview(t);
+      // Fermo sulle proposte: niente revisione, si aspetta la scelta dell'utente
+      const fine = [...(this.dev.session?.items ?? [])].reverse().find((i) => i.kind === "text")?.text ?? "";
+      t.proposals = fine.includes(".oltremare/proposte/");
+      if (t.proposals) t.phase = "done";
+      else if (await this.wantsReview(t)) await this.startReview(t);
       else t.phase = "done";
     } else if (t.phase === "reviewing" && t.reviewSession) {
       const r = (await api.studioReviewResult(this.path, t.reviewSession).catch(() => null)) ?? { esito: "sconosciuto" as const, sintesi: "", problemi: [], voto: null, testo: "Non sono riuscito a leggere il verdetto." };

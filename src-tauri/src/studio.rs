@@ -434,7 +434,8 @@ fn euristica(testo: &str) -> Value {
     } else {
         ("media", "opus", false)
     };
-    json!({ "kind": tipo, "model": modello, "plan": piano, "reason": "valutazione rapida", "source": "euristica" })
+    let grafica = tipo != "domanda" && ["grafic", "interfaccia", "schermat", "layout", "design", "stile", "aspetto", "colori", "tema ", "pagina", "landing", "restyl", "ridisegn", " ui", "ux"].iter().any(|k| t.contains(k));
+    json!({ "kind": tipo, "model": modello, "plan": piano, "grafica": grafica, "reason": "valutazione rapida", "source": "euristica" })
 }
 
 #[tauri::command]
@@ -442,13 +443,14 @@ pub async fn studio_classify(handle: AppHandle, project: String, text: String, c
     let s = handle.state::<App>().store.settings();
     let Some(bin) = crate::providers::claude_code::trova(&s.claude_code_path) else { return Ok(euristica(&text)) };
     let istr = "Sei l'orchestratore di un ambiente di sviluppo. Classifica la richiesta dell'utente e rispondi SOLO con JSON valido, senza testo attorno:\n\
-{\"kind\": \"domanda\"|\"piccola\"|\"media\"|\"grande\", \"model\": \"haiku\"|\"sonnet\"|\"opus\"|\"fable\", \"plan\": true|false, \"reason\": \"una frase in italiano\"}\n\
+{\"kind\": \"domanda\"|\"piccola\"|\"media\"|\"grande\", \"model\": \"haiku\"|\"sonnet\"|\"opus\"|\"fable\", \"plan\": true|false, \"grafica\": true|false, \"reason\": \"una frase in italiano\"}\n\
 Regole (la qualità conta più della velocità: meglio un modello forte che un giro di correzioni): domanda = chiede spiegazioni o informazioni, nessuna modifica (sonnet, plan false). \
 piccola = modifica locale e ovvia in uno o due file (sonnet, plan false). \
 media = funzionalità o correzione circoscritta, anche in più file, o un'indagine su un problema (opus, plan false). \
 grande = più parti del sistema, architettura, migrazioni, nuove funzionalità ampie o richieste davvero aperte (opus, plan true). \
 Usa fable (il modello più capace) solo per i lavori grandi più difficili: problemi complessi da diagnosticare, algoritmi delicati, sicurezza, ragionamento molto profondo (plan true).\n\
-Se c'è una conversazione in corso, il nuovo messaggio va letto alla luce di quella: una conferma, una risposta o un'aggiunta a quanto appena detto («ok fallo», «sì», «procedi», «e anche…», una correzione) NON è ambigua né grande: ha lo stesso tipo del lavoro in corso, plan false.";
+Se c'è una conversazione in corso, il nuovo messaggio va letto alla luce di quella: una conferma, una risposta o un'aggiunta a quanto appena detto («ok fallo», «sì», «procedi», «e anche…», una correzione) NON è ambigua né grande: ha lo stesso tipo del lavoro in corso, plan false.\n\
+grafica = true se la richiesta crea o cambia l'aspetto visivo: schermate, layout, stile, colori, tipografia, componenti visivi, una pagina o un'interfaccia nuova, un progetto nuovo con interfaccia. false per logica, dati, bug non visivi, domande, e per le risposte a proposte grafiche già mostrate (la scelta di una proposta, un commento su di esse).";
     // Il classificatore non lavora nel progetto: lì lascerebbe una sessione ogni volta, scambiata per la conversazione
     let scratch = handle.state::<App>().data_dir.join("claude-code");
     let _ = std::fs::create_dir_all(&scratch);
@@ -569,7 +571,7 @@ const SENIOR: &str = "Lavori come uno sviluppatore senior, e il tuo lavoro sarà
 - Sei l'orchestratore di una squadra, non uno sviluppatore solitario. Regola, non suggerimento: per ogni lavoro che tocca più di 2-3 file o più aree (backend e frontend, più moduli, codice e test, migrazione e API) prima scomponi il lavoro in pacchetti indipendenti, poi delega: un sotto-agente per pacchetto, \
 lanciati TUTTI nello stesso messaggio (più chiamate Agent nello stesso turno), ognuno con un incarico completo e autosufficiente (obiettivo, file e cartelle sue, vincoli, come verificare) e file distinti perché non si sovrappongano. Anche per capire un codice che non conosci lancia 2-3 sotto-agenti di esplorazione in parallelo su aree diverse invece di leggere tutto da solo. \
 Mentre lavorano tu prepari l'integrazione; quando riferiscono leggi le loro modifiche, integra, esegui build e test sul risultato complessivo e correggi. Lavora da solo solo se il compito è davvero sequenziale o tocca 1-2 file; in quel caso dillo in una riga.\n\
-- Interfaccia e grafica (regola obbligatoria): prima di creare o cambiare schermate, componenti, stili o testi visibili carica con lo strumento Skill la skill «impeccable» e seguila (direzione visiva definita, gerarchia, spaziature, stati, accessibilità, niente aspetto predefinito o generico); carica anche «design-taste-frontend» (taste-skill) e «humanizer» per i testi, se sono installate. Il progetto deve avere PRODUCT.md e DESIGN.md nella radice (contesto del prodotto e sistema visivo, come li vuole impeccable): se mancano, il primo incarico al frontend è crearli; se il lavoro cambia token, font o componenti di base, DESIGN.md va aggiornato insieme. \
+- Interfaccia e grafica (regola obbligatoria): prima di creare o cambiare schermate, componenti, stili o testi visibili carica con lo strumento Skill la skill «impeccable» e seguila (direzione visiva definita, gerarchia, spaziature, stati, accessibilità, niente aspetto predefinito o generico); carica anche «design-taste-frontend» (taste-skill) e «humanizer» per i testi, se sono installate. Grafica, regola fissa dell'utente: prima di implementare qualsiasi lavoro visivo mostragli come verrebbe, con 3 proposte davvero diverse (screenshot in .oltremare/proposte/), anche se ha dato indicazioni precise, e fermati finché non sceglie; se nella conversazione ha già scelto una proposta, implementa quella. Il progetto deve avere PRODUCT.md e DESIGN.md nella radice (contesto del prodotto e sistema visivo, come li vuole impeccable): se mancano, il primo incarico al frontend è crearli; se il lavoro cambia token, font o componenti di base, DESIGN.md va aggiornato insieme. \
 Il lavoro di interfaccia non banale va al sotto-agente oltremare-frontend. Un progetto nuovo deve avere fin dal primo scheletro un'identità visiva curata (palette, tipografia, spaziature, stati vuoti e di errore), non la pagina di esempio del framework. Se puoi, guarda il risultato nel browser e correggi quello che non convince.\n\
 - Sotto-agenti specializzati pronti: `oltremare-backend` (API, logica, dati, migrazioni, integrazioni) e `oltremare-frontend` (interfaccia, componenti, stile, accessibilità, copy; usa le skill impeccable, taste-skill e humanizer): passali come subagent_type ad Agent. \
 Per esigenze diverse usa un sotto-agente generico con un incarico su misura oppure, se servirà ancora, definiscine uno nuovo in `.claude/agents/<nome>.md` del progetto (frontmatter name, description, tools; poi le istruzioni) e usalo.\n\
@@ -607,7 +609,30 @@ Usala come punto di partenza invece di riesplorare tutto. {}",
             }
         ))
     });
+    let guide = crate::memoria::cartella(&st.store.settings()).map(|dir| stili(&dir)).unwrap_or_default();
+    let testo = match (testo, guide.is_empty()) {
+        (Some(t), _) => Some(t + &guide),
+        (None, false) => Some(guide),
+        (None, true) => None,
+    };
     (cartelle, testo)
+}
+
+/// Le guide dell'utente nella radice della memoria («Stile di codice», «Stile grafico»): valgono per ogni progetto.
+fn stili(dir: &Path) -> String {
+    let mut out = String::new();
+    for (nome, uso) in [("Stile di codice", "come scrivere il codice"), ("Stile grafico", "come progettare l'interfaccia")] {
+        let f = dir.join(format!("{nome}.md"));
+        let Ok(t) = std::fs::read_to_string(&f) else { continue };
+        let corpo = t.strip_prefix("---\n").and_then(|r| r.find("\n---\n").map(|i| r[i + 5..].to_string())).unwrap_or(t);
+        let corpo: String = corpo.trim().chars().take(12_000).collect();
+        out.push_str(&format!(
+            "\n\n{nome} dell'utente ({uso}; nota {}): seguilo, vale più delle tue abitudini; quando deleghi a un sotto-agente digli di leggere questa nota.\n<{tag}>\n{corpo}\n</{tag}>",
+            f.display(),
+            tag = if nome.ends_with("codice") { "stile_codice" } else { "stile_grafico" }
+        ));
+    }
+    out
 }
 
 /// Revisione del CTO sulle modifiche non committate: sessione a sé, sola lettura, verdetto in JSON alla fine.
@@ -874,6 +899,8 @@ mod prove {
         let g = super::euristica("rifai l'architettura dell'autenticazione con un nuovo modulo");
         assert_eq!(g["model"], "opus");
         assert_eq!(g["plan"], true);
+        assert_eq!(super::euristica("rifai la grafica della schermata di login")["grafica"], true);
+        assert_eq!(super::euristica("correggi il calcolo dell'iva")["grafica"], false);
     }
 
     #[test]

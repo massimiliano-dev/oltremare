@@ -197,6 +197,8 @@ export interface StudioDecision {
   kind: "domanda" | "piccola" | "media" | "grande";
   model: "haiku" | "sonnet" | "opus" | "fable";
   plan: boolean;
+  /** La richiesta cambia l'aspetto visivo: prima le proposte, poi il lavoro */
+  grafica?: boolean;
   reason: string;
   source: string;
 }
