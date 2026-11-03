@@ -214,7 +214,7 @@
             <p class="hint">File binario: non si può modificare qui.</p>
           {:else}
             {#key ws.current.path}
-              <CodeEditor path={ws.current.path} value={ws.current.content} onchange={(v) => ws.current && (ws.current.content = v)} onsave={() => ws.save()} goto={ws.goto?.path === ws.current.path ? ws.goto : null} oncursor={(l, c, n) => (ws.cursor = { line: l, col: c, cursors: n })} diagnostics={ws.problems.filter((p) => p.path === ws.current?.path)} ondefinition={(n) => n && ws.goToDefinition(n)} />
+              <CodeEditor path={ws.current.path} value={ws.current.content} onchange={(v) => ws.current && (ws.current.content = v)} onsave={() => ws.save()} goto={ws.goto?.path === ws.current.path ? ws.goto : null} oncursor={(l, c, n, sel) => ((ws.cursor = { line: l, col: c, cursors: n }), (ws.selection = sel))} diagnostics={ws.problems.filter((p) => p.path === ws.current?.path)} ondefinition={(n) => n && ws.goToDefinition(n)} />
             {/key}
             <div class="status">
               <span class="sp-path" title={ws.current.path}>{rel(ws.current.path)}</span>

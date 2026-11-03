@@ -24,6 +24,15 @@
   let notes = $state("");
   let opinionProfile = $state("");
   let history = $state(false);
+
+  /** Il messaggio come l'hai scritto: senza il contesto dell'editor e le note tecniche aggiunte da Oltremare */
+  function pulito(t: string) {
+    return t
+      .replace(/\n*<contesto_editor>[\s\S]*?<\/contesto_editor>/g, "")
+      .replace(/^\[(Seguito del lavoro|L'utente ha annullato)[^\]]*\]\n/, "")
+      .replace(/\n\nFile allegati dall'utente[\s\S]*$/, "")
+      .trim();
+  }
   let files = $state<string[]>([]);
   let dragging = $state(false);
 
@@ -250,8 +259,8 @@
     {#each blocks as b (b.start)}
       {#if b.kind === "user"}
         <div class="u">
-          {b.items[0].text}
-          <button class="cp" onclick={() => copia(b.items[0].text ?? "")} title="Copia il messaggio" aria-label="Copia il messaggio"><Icon name="copy" size={12} /></button>
+          {pulito(b.items[0].text ?? "")}
+          <button class="cp" onclick={() => copia(pulito(b.items[0].text ?? ""))} title="Copia il messaggio" aria-label="Copia il messaggio"><Icon name="copy" size={12} /></button>
         </div>
       {:else if b.kind === "text"}
         <div class="md a">{@html markdown(b.items[0].text ?? "")}</div>
@@ -422,6 +431,11 @@
           </li>
         {/each}
       </ul>
+    {/if}
+    {#if ws.current && ws.dev.tab === "file"}
+      <div class="ctxchip" title="Claude riceve con il messaggio il file aperto e la selezione">
+        <Icon name="draft" size={11} /> {ws.current.name}{ws.selection?.text.trim() ? ` · righe ${ws.selection.from}–${ws.selection.to}` : ""}
+      </div>
     {/if}
     <div class="box" class:dragging>
       <textarea class="input" rows="3" bind:value={text} onkeydown={key} placeholder={dragging ? "Lascia qui i file" : files.length ? "Cosa devo fare con questi file?" : ws.busy ? "Claude sta lavorando: scrivi pure, il messaggio va in coda" : `Cosa facciamo su ${ws.project?.name ?? "questo progetto"}?`}></textarea>
@@ -1021,6 +1035,22 @@
   }
   .box {
     position: relative;
+  }
+  .ctxchip {
+    justify-self: start;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    color: var(--ink-3);
+    background: var(--paper-2);
+    box-shadow: inset 0 0 0 1px var(--rule-soft);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .box textarea {
     width: 100%;

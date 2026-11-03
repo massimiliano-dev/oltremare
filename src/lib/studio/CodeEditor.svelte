@@ -19,7 +19,7 @@
     onchange: (v: string) => void;
     onsave: () => void;
     goto?: { line: number; col: number; n: number } | null;
-    oncursor?: (line: number, col: number, cursors: number) => void;
+    oncursor?: (line: number, col: number, cursors: number, selection: { text: string; from: number; to: number } | null) => void;
     diagnostics?: { line: number; col: number; severity: "error" | "warning"; message: string }[];
     ondefinition?: (name: string) => void;
   } = $props();
@@ -95,7 +95,9 @@
               if (u.selectionSet || u.docChanged) {
                 const h = u.state.selection.main.head;
                 const l = u.state.doc.lineAt(h);
-                oncursor?.(l.number, h - l.from + 1, u.state.selection.ranges.length);
+                const m = u.state.selection.main;
+                const sel = m.empty ? null : { text: u.state.sliceDoc(m.from, m.to).slice(0, 4000), from: u.state.doc.lineAt(m.from).number, to: u.state.doc.lineAt(m.to).number };
+                oncursor?.(l.number, h - l.from + 1, u.state.selection.ranges.length, sel);
               }
             }),
           ],

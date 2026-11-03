@@ -121,6 +121,8 @@ export class Workspace {
   sidebar = $state<"files" | "search" | "problems">("files");
   quickOpen = $state(false);
   cursor = $state({ line: 1, col: 1, cursors: 1 });
+  /** Testo selezionato nell'editor (va a Claude con il messaggio, come il contesto di un IDE) */
+  selection = $state<{ text: string; from: number; to: number } | null>(null);
   /** Ricerca nel progetto (anche aperta da «vai alla definizione» con più risultati) */
   searchQuery = $state("");
   searchRegex = $state(false);
@@ -263,6 +265,9 @@ export class Workspace {
       : seguito
         ? `[Seguito del lavoro appena concluso in questa stessa sessione: il piano era già fatto ed eseguito, non rifarlo; integra quanto segue e verifica.]\n${task.text}`
         : task.text;
+    // Come in un IDE: Claude sa quale file hai davanti e cosa hai selezionato («sistema questo», «questa funzione»)
+    const contestoEditor = this.contestoEditor();
+    const daInviare = contestoEditor ? `${invio}\n\n${contestoEditor}` : invio;
     const t = this.tasks[this.tasks.length - 1];
     try {
       if (seguito) {
@@ -276,7 +281,7 @@ export class Workspace {
       t.phase = t.plan ? "planning" : "working";
       const nuova = newSession || this.fresh;
       this.fresh = false;
-      const r = await api.studioRun(this.path, invio, t.model, t.plan, t.profile || undefined, nuova ? undefined : (this.dev.sessionId ?? this.dev.session?.id ?? undefined), nuova, files);
+      const r = await api.studioRun(this.path, daInviare, t.model, t.plan, t.profile || undefined, nuova ? undefined : (this.dev.sessionId ?? this.dev.session?.id ?? undefined), nuova, files);
       t.session = r.session;
       this.dev.sessionId = r.session || null;
       this.dev.refreshSession();
@@ -286,6 +291,18 @@ export class Workspace {
       t.error = errorText(e);
       this.drain();
     }
+  }
+
+  private contestoEditor() {
+    const f = this.current;
+    if (!f || this.dev.tab !== "file") return "";
+    const rel = f.path.startsWith(this.path) ? f.path.slice(this.path.length + 1) : f.path;
+    const sel = this.selection;
+    if (sel?.text.trim()) {
+      const lang = f.name.split(".").pop() ?? "";
+      return `<contesto_editor>Nell'editor l'utente ha aperto ${rel} e ha selezionato le righe ${sel.from}-${sel.to}:\n\`\`\`${lang}\n${sel.text}\n\`\`\`\n«Questo», «qui» e simili si riferiscono probabilmente alla selezione.</contesto_editor>`;
+    }
+    return `<contesto_editor>Nell'editor l'utente ha aperto ${rel}, con il cursore alla riga ${this.cursor.line}.</contesto_editor>`;
   }
 
   /** Il filo della conversazione per l'orchestratore: la richiesta precedente e l'ultima risposta di Claude. */
