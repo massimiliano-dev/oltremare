@@ -621,13 +621,20 @@ Usala come punto di partenza invece di riesplorare tutto. {}",
 /// Le guide dell'utente nella radice della memoria («Stile di codice», «Stile grafico»): valgono per ogni progetto.
 fn stili(dir: &Path) -> String {
     let mut out = String::new();
-    for (nome, uso) in [("Stile di codice", "come scrivere il codice"), ("Stile grafico", "come progettare l'interfaccia")] {
+    for (nome, uso, regola) in [
+        ("Stile di codice", "come scrivere il codice", "seguilo, vale più delle tue abitudini; il CLAUDE.md e le convenzioni del progetto vengono prima"),
+        (
+            "Stile grafico",
+            "come progettare l'interfaccia",
+            "è il punto di partenza, non un'identità da copiare: se il progetto ha già una sua identità (DESIGN.md, PRODUCT.md, la descrizione dell'utente o un riferimento) segui quella; dalla guida prendi qualità, processo e cose da evitare, e per un progetto nuovo crea un mondo visivo suo",
+        ),
+    ] {
         let f = dir.join(format!("{nome}.md"));
         let Ok(t) = std::fs::read_to_string(&f) else { continue };
         let corpo = t.strip_prefix("---\n").and_then(|r| r.find("\n---\n").map(|i| r[i + 5..].to_string())).unwrap_or(t);
         let corpo: String = corpo.trim().chars().take(12_000).collect();
         out.push_str(&format!(
-            "\n\n{nome} dell'utente ({uso}; nota {}): seguilo, vale più delle tue abitudini; quando deleghi a un sotto-agente digli di leggere questa nota.\n<{tag}>\n{corpo}\n</{tag}>",
+            "\n\n{nome} dell'utente ({uso}; nota {}): {regola}. Quando deleghi a un sotto-agente digli di leggere questa nota.\n<{tag}>\n{corpo}\n</{tag}>",
             f.display(),
             tag = if nome.ends_with("codice") { "stile_codice" } else { "stile_grafico" }
         ));

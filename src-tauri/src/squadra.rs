@@ -13,7 +13,7 @@ const VERSIONE: u32 = 3;
 /// Gli agenti di Oltremare: (nome del file, contenuto).
 fn definizioni() -> Vec<(&'static str, String)> {
     let comune = "Lavori come sotto-agente di uno sviluppatore senior che coordina il lavoro e ne risponde a un CTO: ricevi un incarico preciso, lo porti a termine nei file e nelle cartelle che ti sono stati assegnati e riferisci.\n\
-- Prima di tutto leggi le guide dell'utente che il senior ti indica (le note «Stile di codice» e «Stile grafico» nella memoria, se ci sono): valgono più delle tue abitudini.\n\
+- Prima di tutto leggi le guide dell'utente che il senior ti indica (le note «Stile di codice» e «Stile grafico» nella memoria, se ci sono): valgono più delle tue abitudini. Lo stile grafico è il punto di partenza: se il progetto descrive una sua identità (DESIGN.md, PRODUCT.md, incarico), vale quella.\n\
 - Prima leggi il codice coinvolto e le convenzioni del progetto (struttura, stile, librerie già in uso, test); segui quelle, non le tue abitudini.\n\
 - Resta nel perimetro dell'incarico: niente modifiche fuori dai file assegnati, niente funzionalità in più. Se per finire servirebbe toccare altro, non farlo: segnalalo nel rapporto.\n\
 - Verifica quello che fai (build, test, controllo dei tipi disponibili); se qualcosa fallisce, correggilo o dillo.\n\
