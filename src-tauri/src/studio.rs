@@ -359,6 +359,9 @@ pub fn apri(app: &AppHandle, progetto: Option<&str>, richiesta: Option<&str>) ->
     if let Some(w) = app.get_webview_window("studio") {
         let _ = w.unminimize();
         let _ = w.show();
+        if !w.is_maximized().unwrap_or(false) {
+            let _ = w.maximize();
+        }
         let _ = w.set_focus();
         if progetto.is_some() || richiesta.is_some() {
             let _ = app.emit_to("studio", "studio-open", json!({ "project": progetto, "prompt": richiesta }));
@@ -372,7 +375,8 @@ pub fn apri(app: &AppHandle, progetto: Option<&str>, richiesta: Option<&str>) ->
     if let Some(r) = richiesta {
         url.push_str(&format!("&prompt={}", codifica(r)));
     }
-    let mut b = WebviewWindowBuilder::new(app, "studio", WebviewUrl::App(url.into())).title("Oltremare Studio").inner_size(1500.0, 940.0).min_inner_size(1100.0, 680.0);
+    // Lo Studio si apre sempre a tutto schermo (finestra massimizzata, non fullscreen)
+    let mut b = WebviewWindowBuilder::new(app, "studio", WebviewUrl::App(url.into())).title("Oltremare Studio").inner_size(1500.0, 940.0).min_inner_size(1100.0, 680.0).maximized(true);
     #[cfg(target_os = "macos")]
     {
         b = b.title_bar_style(tauri::TitleBarStyle::Overlay).hidden_title(true);
