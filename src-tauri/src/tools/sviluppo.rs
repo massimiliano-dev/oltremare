@@ -13,6 +13,9 @@ use tokio_util::sync::CancellationToken;
 /// Comandi che Claude Code può eseguire da solo mentre sviluppa (le modifiche ai file sono già consentite).
 const CONSENTITI: &[&str] = &[
     "Read", "Glob", "Grep", "Edit", "Write", "MultiEdit", "NotebookEdit", "TodoWrite", "WebFetch", "WebSearch",
+    // Qualsiasi comando del terminale (az, gcloud, vercel, docker, curl, psql…), come farebbe l'utente:
+    // i divieti in VIETATI vincono comunque
+    "Bash",
     // Sotto-agenti: lavorano in parallelo nella stessa sessione, l'agente principale coordina e verifica
     "Agent", "Task", "Skill",
     // Gateway OmniRoute (plugin di Claude Code), se installato: i suoi strumenti MCP
@@ -28,7 +31,13 @@ const CONSENTITI: &[&str] = &[
 /// Mai senza una richiesta esplicita dell'utente: si fanno da Oltremare, con approvazione.
 const VIETATI: &[&str] = &[
     "Bash(git push --force:*)", "Bash(git push -f:*)", "Bash(git push --force-with-lease:*)", "Bash(git push --delete:*)", "Bash(git reset --hard:*)", "Bash(git rebase:*)", "Bash(git branch -D:*)",
-    "Bash(sudo:*)", "Bash(rm -rf:*)", "Bash(npm publish:*)", "Bash(cargo publish:*)", "Bash(gh pr merge:*)",
+    "Bash(sudo:*)", "Bash(rm -rf:*)", "Bash(rm -fr:*)", "Bash(npm publish:*)", "Bash(cargo publish:*)", "Bash(gh pr merge:*)",
+    // Cloud e infrastruttura: leggere, diagnosticare e distribuire sì, cancellare no
+    "Bash(az group delete:*)", "Bash(az resource delete:*)", "Bash(az containerapp delete:*)", "Bash(az containerapp env delete:*)", "Bash(az webapp delete:*)",
+    "Bash(az sql db delete:*)", "Bash(az sql server delete:*)", "Bash(az postgres flexible-server delete:*)", "Bash(az storage account delete:*)", "Bash(az keyvault delete:*)", "Bash(az keyvault purge:*)",
+    "Bash(gcloud projects delete:*)", "Bash(firebase projects:delete:*)", "Bash(vercel remove:*)", "Bash(vercel rm:*)",
+    "Bash(terraform destroy:*)", "Bash(kubectl delete namespace:*)", "Bash(docker system prune:*)", "Bash(docker volume prune:*)",
+    "Bash(dropdb:*)", "Bash(git clean -fdx:*)",
 ];
 
 pub(crate) fn titolo_breve(input: &Value) -> String {
@@ -190,7 +199,7 @@ pub(crate) fn comando_headless_con(bin: &Path, cartella: &Path, messaggio: &str,
         .arg(vietati.join(","))
         .arg("--append-system-prompt")
         .arg(format!(
-            "Lavori su richiesta dell'utente tramite il suo assistente Oltremare, senza poter fare domande: decidi in modo ragionevole e dichiara le scelte. Puoi fare commit, merge e push sul ramo su cui lavori quando il lavoro è verificato (build e test), e portare un rilascio fino in fondo se te lo chiedono; mai forzare o riscrivere la storia (niente --force, rebase, reset --hard) e, se tocchi main, dillo chiaramente nel riepilogo. Alla fine scrivi un riepilogo breve: cosa hai cambiato, come verificarlo, cosa resta da fare.\nPer vedere e provare l'app (o navigare un sito) usa Claude in Chrome (strumenti mcp__claude-in-chrome__*): è il Chrome dell'utente, che ti guarda lavorare. Crea una scheda nuova e lavora lì, senza toccare le schede già aperte; alla fine lasciala sull'ultima pagina utile.{}",
+            "Lavori su richiesta dell'utente tramite il suo assistente Oltremare, senza poter fare domande: decidi in modo ragionevole e dichiara le scelte. Puoi fare commit, merge e push sul ramo su cui lavori quando il lavoro è verificato (build e test), e portare un rilascio fino in fondo se te lo chiedono; mai forzare o riscrivere la storia (niente --force, rebase, reset --hard) e, se tocchi main, dillo chiaramente nel riepilogo. Puoi lanciare qualsiasi comando del terminale, anche le CLI dei cloud (az, gcloud, vercel, firebase, docker…) con le credenziali già attive dell'utente: indaga e verifica da solo invece di chiedere all'utente di farlo. Per le azioni che cambiano la produzione (deploy, riavvii, scalature, migrazioni sul database vero) procedi solo se la richiesta lo chiede o lo rende necessario, e scrivile nel riepilogo; non cancellare risorse. Alla fine scrivi un riepilogo breve: cosa hai cambiato, come verificarlo, cosa resta da fare.\nPer vedere e provare l'app (o navigare un sito) usa Claude in Chrome (strumenti mcp__claude-in-chrome__*): è il Chrome dell'utente, che ti guarda lavorare. Crea una scheda nuova e lavora lì, senza toccare le schede già aperte; alla fine lasciala sull'ultima pagina utile.{}",
             if o.istruzioni.is_empty() { String::new() } else { format!("\n{}", o.istruzioni) }
         ));
     let modello = if !o.modello.is_empty() { o.modello.clone() } else { s.claude_code_model.clone() };
