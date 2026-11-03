@@ -21,10 +21,15 @@ const CONSENTITI: &[&str] = &[
     "Bash(node:*)", "Bash(tsc:*)", "Bash(cargo:*)", "Bash(go:*)", "Bash(python3:*)", "Bash(pytest:*)", "Bash(dotnet:*)", "Bash(swift:*)", "Bash(xcodebuild:*)",
     "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git add:*)", "Bash(git commit:*)", "Bash(git checkout:*)",
     "Bash(git switch:*)", "Bash(git branch:*)", "Bash(git stash:*)", "Bash(git restore:*)", "Bash(git fetch:*)", "Bash(git pull:*)",
+    // Rilascio: merge e push li fa lui, ma mai riscrivendo la storia (vedi VIETATI)
+    "Bash(git merge:*)", "Bash(git push:*)", "Bash(git tag:*)", "Bash(gh pr create:*)", "Bash(gh pr view:*)", "Bash(gh pr status:*)", "Bash(gh run:*)",
     "Bash(ls:*)", "Bash(mkdir:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(wc:*)", "Bash(find:*)", "Bash(grep:*)", "Bash(rg:*)",
 ];
 /// Mai senza una richiesta esplicita dell'utente: si fanno da Oltremare, con approvazione.
-const VIETATI: &[&str] = &["Bash(git push:*)", "Bash(sudo:*)", "Bash(rm -rf:*)", "Bash(npm publish:*)", "Bash(cargo publish:*)", "Bash(gh pr merge:*)"];
+const VIETATI: &[&str] = &[
+    "Bash(git push --force:*)", "Bash(git push -f:*)", "Bash(git push --force-with-lease:*)", "Bash(git push --delete:*)", "Bash(git reset --hard:*)", "Bash(git rebase:*)", "Bash(git branch -D:*)",
+    "Bash(sudo:*)", "Bash(rm -rf:*)", "Bash(npm publish:*)", "Bash(cargo publish:*)", "Bash(gh pr merge:*)",
+];
 
 pub(crate) fn titolo_breve(input: &Value) -> String {
     breve(input)
@@ -185,7 +190,7 @@ pub(crate) fn comando_headless_con(bin: &Path, cartella: &Path, messaggio: &str,
         .arg(vietati.join(","))
         .arg("--append-system-prompt")
         .arg(format!(
-            "Lavori su richiesta dell'utente tramite il suo assistente Oltremare, senza poter fare domande: decidi in modo ragionevole e dichiara le scelte. Non fare push. Alla fine scrivi un riepilogo breve: cosa hai cambiato, come verificarlo, cosa resta da fare.\nPer vedere e provare l'app (o navigare un sito) usa Claude in Chrome (strumenti mcp__claude-in-chrome__*): è il Chrome dell'utente, che ti guarda lavorare. Crea una scheda nuova e lavora lì, senza toccare le schede già aperte; alla fine lasciala sull'ultima pagina utile.{}",
+            "Lavori su richiesta dell'utente tramite il suo assistente Oltremare, senza poter fare domande: decidi in modo ragionevole e dichiara le scelte. Puoi fare commit, merge e push sul ramo su cui lavori quando il lavoro è verificato (build e test), e portare un rilascio fino in fondo se te lo chiedono; mai forzare o riscrivere la storia (niente --force, rebase, reset --hard) e, se tocchi main, dillo chiaramente nel riepilogo. Alla fine scrivi un riepilogo breve: cosa hai cambiato, come verificarlo, cosa resta da fare.\nPer vedere e provare l'app (o navigare un sito) usa Claude in Chrome (strumenti mcp__claude-in-chrome__*): è il Chrome dell'utente, che ti guarda lavorare. Crea una scheda nuova e lavora lì, senza toccare le schede già aperte; alla fine lasciala sull'ultima pagina utile.{}",
             if o.istruzioni.is_empty() { String::new() } else { format!("\n{}", o.istruzioni) }
         ));
     let modello = if !o.modello.is_empty() { o.modello.clone() } else { s.claude_code_model.clone() };
