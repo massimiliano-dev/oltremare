@@ -67,6 +67,9 @@
   --shadow-sheet: 0 10px 24px -8px oklch(0.35 0.12 278 / 0.28), 0 3px 8px -3px oklch(0.35 0.12 278 / 0.18), 0 0 0 1px var(--rule);
 
   font-feature-settings: normal;
+
+  --ko-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ko-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 :root[data-look="keyops"][data-theme="dark"] {
@@ -140,4 +143,81 @@
 :root[data-look="keyops"] :is(.agents li strong, .rtxt strong, .card .top strong, .grid strong, .pn, .who strong) {
   font-family: "KO Display", var(--font-sans);
   letter-spacing: -0.015em;
+}
+
+/* ---------- Movimento (grammatica di KeyOps: press 160ms, page-in 280ms, pop-in 520ms a cascata, niente rimbalzi) ---------- */
+@keyframes ko-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes ko-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.9);
+  }
+}
+@keyframes ko-wave {
+  0%,
+  60%,
+  100% {
+    transform: rotate(0deg);
+  }
+  10%,
+  30% {
+    transform: rotate(10deg);
+  }
+  20%,
+  40% {
+    transform: rotate(-6deg);
+  }
+}
+
+/* Ingresso di pagina: ogni vista, messaggio e scheda entra con un piccolo passo verso l'alto */
+:root[data-look="keyops"] :is(.memview, .picker .hero, .welcome, .pane > *, .turn, .orch .u, .orch .md.a, .task, .review, .perm, .crumbs) {
+  animation: ko-page-in 280ms var(--ko-quint) backwards;
+}
+
+/* Comparsa a cascata: card dei progetti, ripresi di recente, suggerimenti, agenti, squadra */
+:root[data-look="keyops"] :is(.picker .grid > *, .recent > *, .sugg > *, .agents > li, .team .agents > *, .wact > *) {
+  animation: ko-pop-in 520ms var(--ko-expo) backwards;
+}
+:root[data-look="keyops"] :is(.picker .grid, .recent, .sugg, .agents, .team .agents, .wact) > :nth-child(1) { animation-delay: 40ms; }
+:root[data-look="keyops"] :is(.picker .grid, .recent, .sugg, .agents, .team .agents, .wact) > :nth-child(2) { animation-delay: 130ms; }
+:root[data-look="keyops"] :is(.picker .grid, .recent, .sugg, .agents, .team .agents, .wact) > :nth-child(3) { animation-delay: 220ms; }
+:root[data-look="keyops"] :is(.picker .grid, .recent, .sugg, .agents, .team .agents, .wact) > :nth-child(4) { animation-delay: 310ms; }
+:root[data-look="keyops"] :is(.picker .grid, .recent, .sugg, .agents, .team .agents, .wact) > :nth-child(5) { animation-delay: 390ms; }
+:root[data-look="keyops"] :is(.picker .grid, .recent, .sugg, .agents, .team .agents, .wact) > :nth-child(6) { animation-delay: 460ms; }
+:root[data-look="keyops"] :is(.picker .grid, .recent, .sugg, .agents, .team .agents, .wact) > :nth-child(n + 7) { animation-delay: 520ms; }
+
+/* Pressione tattile su tutto ciò che si clicca come un tassello */
+:root[data-look="keyops"] :is(.agent, .conv, .rcard, .picker .grid > *, .sugg > *, .ftab .fname, .views button, .ptab .pt, .wact > *, .tabs button, .filters button, .newp) {
+  transition: transform 160ms var(--ko-quint), background-color 150ms var(--ko-quint), color 150ms var(--ko-quint), box-shadow 150ms var(--ko-quint);
+}
+:root[data-look="keyops"] :is(.agent, .conv, .rcard, .picker .grid > *, .sugg > *, .ftab .fname, .views button, .ptab .pt, .wact > *, .tabs button, .filters button, .newp):active {
+  transform: scale(0.96);
+}
+
+/* Card dei progetti piatte a riposo; «Lift» quando ci passi sopra (sono cliccabili, si sollevano) */
+:root[data-look="keyops"] .picker .grid > * {
+  transition: transform 160ms var(--ko-quint), box-shadow 200ms var(--ko-quint);
+}
+:root[data-look="keyops"] .picker .grid > *:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px -8px oklch(0.35 0.12 278 / 0.28), 0 3px 8px -3px oklch(0.35 0.12 278 / 0.18);
+}
+
+/* Il saluto: una sola oscillazione del robot quando arrivi, come la mano di KeyOps */
+:root[data-look="keyops"] .hello > :first-child {
+  transform-origin: 50% 90%;
+  animation: ko-wave 1.8s ease-in-out 600ms 1 both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-look="keyops"] * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
