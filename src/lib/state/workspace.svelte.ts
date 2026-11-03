@@ -1,6 +1,7 @@
 // Uno spazio di lavoro dello Studio: un progetto aperto in una scheda, con il suo albero dei file,
 // il suo git, l'editor, l'orchestratore (compiti, coda, revisione del CTO) e la memoria del progetto.
-import { api, errorText, type AgentDef, type StudioDecision, type StudioProject, type StudioReview, type TeamInfo } from "../api";
+import { on } from "../events";
+import { api, errorText, type StudioPermission, type AgentDef, type StudioDecision, type StudioProject, type StudioReview, type TeamInfo } from "../api";
 import { DevState } from "./dev.svelte";
 import { GitStore } from "./git.svelte";
 import { ui } from "./ui.svelte";
@@ -104,6 +105,9 @@ export class Workspace {
   fresh = $state(false);
   /** Messaggi scritti mentre Claude lavora: partono in ordine, nella stessa sessione, appena finisce */
   queue = $state<{ id: number; text: string; files: string[]; follow: boolean }[]>([]);
+  /** Azioni delicate in attesa del tuo permesso (cancellazioni, force push…) */
+  permissions = $state<StudioPermission[]>([]);
+  private unlisten: (() => void)[] = [];
   /** La squadra al lavoro: sotto-agenti della sessione corrente, letti ogni pochi secondi */
   team = $state<TeamInfo | null>(null);
   /** Gli agenti definiti (di Oltremare e dell'utente) */
@@ -135,12 +139,17 @@ export class Workspace {
     this.git.start(this.project.path);
     this.refreshTeam();
     this.timers.push(setInterval(() => this.refreshTeam(), 2000));
+    this.permissions = await api.studioPermissions(this.path).catch(() => []);
+    this.unlisten.push(await on("studio-permission", (p) => p.folder === this.path && !this.permissions.some((x) => x.id === p.id) && (this.permissions = [...this.permissions, p])));
+    this.unlisten.push(await on("studio-permission-done", (p) => (this.permissions = this.permissions.filter((x) => x.id !== p.id))));
     api.studioAgents(this.path).then((a) => (this.agentDefs = a)).catch(() => {});
   }
 
   stop() {
     for (const t of this.timers) clearInterval(t);
     this.timers = [];
+    for (const u of this.unlisten) u();
+    this.unlisten = [];
     this.dev.stop();
     this.git.stop();
   }
@@ -441,6 +450,11 @@ export class Workspace {
       t.error = "Fermato da te";
     }
     this.drain();
+  }
+
+  async answerPermission(id: string, allow: boolean) {
+    this.permissions = this.permissions.filter((x) => x.id !== id);
+    await api.studioPermissionAnswer(id, allow).catch((e) => ui.toast(errorText(e), "error"));
   }
 
   /** L'utente accetta il lavoro così com'è, nonostante i rilievi. */

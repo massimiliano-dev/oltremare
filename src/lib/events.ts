@@ -1,5 +1,6 @@
 // Eventi dal backend, tipizzati per nome.
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { StudioPermission } from "./api";
 import type { McpStatus, Notifica, DownloadProgress, SidecarStatus, ApprovalRequest, AvatarState, Decision, Run, RunStatus, SettingsState, Step, Usage } from "./api";
 
 export interface EventMap {
@@ -44,6 +45,8 @@ export interface EventMap {
   "dev-project": { folder: string };
   "dev-session": { folder: string; done: boolean };
   "term-data": { id: string; data: string };
+  "studio-permission": StudioPermission;
+  "studio-permission-done": { id: string };
   "term-exit": { id: string; code: number | null };
   "studio-open": { project: string | null; prompt: string | null };
 }

@@ -305,6 +305,8 @@ export function installPreview() {
           return { enabled: true, path: "/Users/demo/Desktop/Obsidian", ready: true, notes: 23, obsidian: true, projectNote: a.project ? "/Users/demo/Desktop/Obsidian/Progetti/negozio.md" : null, suggested: null };
         case "memory_open": return null;
         case "memory_seed": return 82;
+        case "studio_permissions": return [{ id: "p1", folder: "/Users/demo/Sviluppo/negozio", tool: "Bash", title: "az containerapp delete -g rg-portale -n sbx-1234 --yes", description: "Elimina la sandbox bloccata in preparazione", input: {}, at: now }];
+        case "studio_permission_answer": return true;
         case "claude_plugins":
           return [
             { id: "ponytail", name: "Ponytail", description: "Fa scrivere meno codice.", installed: true, marketplace: true, cli: "", cliOk: true, commands: [] },

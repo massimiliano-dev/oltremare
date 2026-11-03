@@ -372,6 +372,22 @@
     {/if}
   </div>
 
+  {#if ws.permissions.length}
+    <div class="perms" role="alert">
+      {#each ws.permissions as pm (pm.id)}
+        <div class="perm">
+          <div class="ph"><Icon name="shield" size={14} /><strong>Claude chiede il permesso</strong></div>
+          {#if pm.description}<p>{pm.description}</p>{/if}
+          <code>{pm.title}</code>
+          <div class="pact">
+            <button class="btn btn-primary sm" onclick={() => ws.answerPermission(pm.id, true)}><Icon name="check" size={12} /> Consenti</button>
+            <button class="btn btn-quiet sm" onclick={() => ws.answerPermission(pm.id, false)}>Nega</button>
+          </div>
+        </div>
+      {/each}
+    </div>
+  {/if}
+
   <div class="composer">
     {#if ws.queue.length}
       <ol class="queue" aria-label="Messaggi in coda">
@@ -954,6 +970,40 @@
     border-radius: var(--r-sm);
     background: var(--paper);
     font-size: var(--t-sm);
+  }
+  .perms {
+    display: grid;
+    gap: 8px;
+    padding: 10px 12px 0;
+  }
+  .perm {
+    display: grid;
+    gap: 6px;
+    padding: 10px 12px;
+    border-radius: var(--r-md);
+    background: color-mix(in oklch, var(--warn) 10%, var(--paper));
+    box-shadow: inset 0 0 0 1.5px color-mix(in oklch, var(--warn) 60%, transparent);
+    font-size: var(--t-sm);
+  }
+  .perm .ph {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--warn-ink);
+  }
+  .perm p {
+    margin: 0;
+    color: var(--ink-2);
+  }
+  .perm code {
+    padding: 6px 8px;
+    border-radius: 7px;
+    background: var(--paper);
+    font-size: 0.78rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    user-select: text;
+    -webkit-user-select: text;
   }
   .composer {
     display: grid;

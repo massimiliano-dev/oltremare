@@ -240,6 +240,16 @@ export interface MemoryNote {
   citata_da: string[];
 }
 
+export interface StudioPermission {
+  id: string;
+  folder: string;
+  tool: string;
+  title: string;
+  description?: string | null;
+  input: Record<string, unknown>;
+  at: number;
+}
+
 export interface ClaudePlugin {
   id: string;
   name: string;
@@ -648,6 +658,8 @@ export const api = {
   studioTeam: (project: string, session?: string | null) => invoke<TeamInfo>("studio_team", { project, session: session ?? undefined }),
   studioAgents: (project: string) => invoke<AgentDef[]>("studio_agents", { project }),
   claudePlugins: () => invoke<ClaudePlugin[]>("claude_plugins"),
+  studioPermissionAnswer: (id: string, allow: boolean) => invoke<boolean>("studio_permission_answer", { id, allow }),
+  studioPermissions: (folder: string) => invoke<StudioPermission[]>("studio_permissions", { folder }),
   studioReview: (project: string, text: string, model: string, profile?: string) => invoke<{ session: string }>("studio_review", { project, text, model, profile }),
   studioReviewResult: (project: string, session: string) => invoke<StudioReview>("studio_review_result", { project, session }),
   studioRun: (project: string, text: string, model: string, plan: boolean, profile?: string, session?: string, newSession?: boolean, attachments?: string[]) =>

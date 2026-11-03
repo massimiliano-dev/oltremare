@@ -986,6 +986,8 @@ pub fn run() {
             squadra::studio_team,
             squadra::studio_agents,
             squadra::claude_plugins,
+            mcp::studio_permission_answer,
+            mcp::studio_permissions,
             studio::memory_seed,
             studio::studio_review_result,
             studio::studio_run,
