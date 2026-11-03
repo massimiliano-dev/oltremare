@@ -311,6 +311,8 @@ export function installPreview() {
         case "ide_search": return [{ file: "src/carrello.ts", path: "/Users/demo/Sviluppo/negozio/src/carrello.ts", line: 4, col: 10, text: "  return applicaSconto(lordo, codice);" }, { file: "src/sconti.ts", path: "/Users/demo/Sviluppo/negozio/src/sconti.ts", line: 1, col: 17, text: "export function applicaSconto(lordo: number, codice?: string) {" }];
         case "ide_create": case "ide_rename": return a.path ?? a.to;
         case "ide_trash": return null;
+        case "ide_check": return { tools: ["svelte-check"], problems: [{ path: "/Users/demo/Sviluppo/negozio/src/carrello.ts", line: 2, col: 10, severity: "error", message: "Property 'qta' does not exist on type 'Riga'.", tool: "tsc" }, { path: "/Users/demo/Sviluppo/negozio/src/components/Carrello.svelte", line: 14, col: 3, severity: "warning", message: "A11y: <input> element should have an associated label", tool: "svelte-check" }] };
+        case "ide_definition": return [{ file: "src/sconti.ts", path: "/Users/demo/Sviluppo/negozio/src/sconti.ts", line: 1, col: 1, text: "export function applicaSconto(lordo: number, codice?: string) {" }];
         case "claude_plugins":
           return [
             { id: "ponytail", name: "Ponytail", description: "Fa scrivere meno codice.", installed: true, marketplace: true, cli: "", cliOk: true, commands: [] },

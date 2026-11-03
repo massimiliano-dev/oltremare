@@ -1,7 +1,7 @@
 // Uno spazio di lavoro dello Studio: un progetto aperto in una scheda, con il suo albero dei file,
 // il suo git, l'editor, l'orchestratore (compiti, coda, revisione del CTO) e la memoria del progetto.
 import { on } from "../events";
-import { api, errorText, type StudioPermission, type AgentDef, type StudioDecision, type StudioProject, type StudioReview, type TeamInfo } from "../api";
+import { api, errorText, type IdeProblem, type StudioPermission, type AgentDef, type StudioDecision, type StudioProject, type StudioReview, type TeamInfo } from "../api";
 import { DevState } from "./dev.svelte";
 import { GitStore } from "./git.svelte";
 import { ui } from "./ui.svelte";
@@ -118,9 +118,18 @@ export class Workspace {
 
   /** Mini IDE: riga a cui saltare nel file aperto, barra laterale, apertura rapida, posizione del cursore */
   goto = $state<{ path: string; line: number; col: number; n: number } | null>(null);
-  sidebar = $state<"files" | "search">("files");
+  sidebar = $state<"files" | "search" | "problems">("files");
   quickOpen = $state(false);
-  cursor = $state({ line: 1, col: 1 });
+  cursor = $state({ line: 1, col: 1, cursors: 1 });
+  /** Ricerca nel progetto (anche aperta da «vai alla definizione» con più risultati) */
+  searchQuery = $state("");
+  searchRegex = $state(false);
+  /** Problemi: errori e avvisi dei compilatori del progetto */
+  problems = $state<IdeProblem[]>([]);
+  checkTools = $state<string[]>([]);
+  checking = $state(false);
+  checkedAt = $state<number | null>(null);
+  private checkTimer: ReturnType<typeof setTimeout> | undefined;
 
   current = $derived(this.files.find((f) => f.path === this.active) ?? null);
   lastTask = $derived(this.tasks.at(-1) ?? null);
@@ -212,6 +221,11 @@ export class Workspace {
       await api.studioSave(f.path, f.content);
       f.saved = f.content;
       this.dev.refreshGit();
+      // Dopo il primo controllo, ogni salvataggio lo ripete (con calma: i compilatori sono lenti)
+      if (this.checkedAt) {
+        clearTimeout(this.checkTimer);
+        this.checkTimer = setTimeout(() => this.runCheck(), 1200);
+      }
     } catch (e) {
       ui.toast(errorText(e), "error");
     }
@@ -508,6 +522,39 @@ export class Workspace {
       t.opinion = await api.studioSecondOpinion(this.path, profile, about, t.planText);
     } catch (e) {
       t.opinion = `Non è riuscito: ${errorText(e)}`;
+    }
+  }
+
+  // ---------- Problemi e definizioni ----------
+
+  async runCheck() {
+    if (this.checking) return;
+    this.checking = true;
+    try {
+      const r = await api.ideCheck(this.path);
+      this.problems = r.problems;
+      this.checkTools = r.tools;
+      this.checkedAt = Date.now();
+    } catch (e) {
+      ui.toast(errorText(e), "error");
+    } finally {
+      this.checking = false;
+    }
+  }
+
+  /** F12 / ⌘+clic: una definizione → la apre; più d'una → le mostra nella ricerca */
+  async goToDefinition(name: string) {
+    const r = await api.ideDefinition(this.path, name).catch(() => []);
+    if (r.length === 1) this.openFile(r[0].path, r[0].line, r[0].col);
+    else if (!r.length) ui.toast(`Nessuna definizione trovata per «${name}»`);
+    else {
+      const first = r[0];
+      if (/\b(function|class|interface|type|enum|fn|struct|trait|def)\b/.test(first.text) && !/\b(function|class|interface|type|enum|fn|struct|trait|def)\b/.test(r[1].text)) this.openFile(first.path, first.line, first.col);
+      else {
+        this.searchRegex = false;
+        this.searchQuery = name;
+        this.sidebar = "search";
+      }
     }
   }
 

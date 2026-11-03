@@ -240,6 +240,15 @@ export interface MemoryNote {
   citata_da: string[];
 }
 
+export interface IdeProblem {
+  path: string;
+  line: number;
+  col: number;
+  severity: "error" | "warning";
+  message: string;
+  tool: string;
+}
+
 export interface StudioPermission {
   id: string;
   folder: string;
@@ -663,6 +672,8 @@ export const api = {
   ideCreate: (folder: string, path: string, dir: boolean) => invoke<string>("ide_create", { folder, path, dir }),
   ideRename: (folder: string, from: string, to: string) => invoke<string>("ide_rename", { folder, from, to }),
   ideTrash: (folder: string, path: string) => invoke<void>("ide_trash", { folder, path }),
+  ideCheck: (folder: string) => invoke<{ tools: string[]; problems: IdeProblem[] }>("ide_check", { folder }),
+  ideDefinition: (folder: string, name: string) => invoke<{ file: string; path: string; line: number; col: number; text: string }[]>("ide_definition", { folder, name }),
   studioPermissionAnswer: (id: string, allow: boolean) => invoke<boolean>("studio_permission_answer", { id, allow }),
   studioPermissions: (folder: string) => invoke<StudioPermission[]>("studio_permissions", { folder }),
   studioReview: (project: string, text: string, model: string, profile?: string) => invoke<{ session: string }>("studio_review", { project, text, model, profile }),

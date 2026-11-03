@@ -34,7 +34,7 @@ fn sotto_progetti(p: &Path) -> Vec<PathBuf> {
 }
 
 /// La cartella e le sue sottocartelle dirette (frontend/, backend/, apps/…): i monorepo tengono lì il codice.
-fn livelli(p: &Path) -> Vec<PathBuf> {
+pub(crate) fn livelli(p: &Path) -> Vec<PathBuf> {
     let mut v = vec![p.to_path_buf()];
     if let Ok(rd) = std::fs::read_dir(p) {
         let mut sotto: Vec<PathBuf> = rd

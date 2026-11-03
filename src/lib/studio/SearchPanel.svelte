@@ -7,8 +7,9 @@
   import type { Workspace as WS } from "../state/workspace.svelte";
 
   const ws = getContext<WS>("ws");
-  let q = $state("");
-  let regex = $state(false);
+  // Testo e modalità vivono nella scheda: «vai alla definizione» può aprire la ricerca già compilata
+  let q = $derived(ws.searchQuery);
+  let regex = $derived(ws.searchRegex);
   let cs = $state(false);
   let results = $state<{ file: string; path: string; line: number; col: number; text: string }[]>([]);
   let busy = $state(false);
@@ -74,9 +75,9 @@
 
 <div class="search">
   <div class="field">
-    <input bind:this={input} bind:value={q} placeholder="Cerca nel progetto" aria-label="Cerca nel progetto" onkeydown={(e) => e.key === "Enter" && run()} />
+    <input bind:this={input} value={q} oninput={(e) => (ws.searchQuery = (e.target as HTMLInputElement).value)} placeholder="Cerca nel progetto" aria-label="Cerca nel progetto" onkeydown={(e) => e.key === "Enter" && run()} />
     <button class="opt" class:on={cs} onclick={() => (cs = !cs)} title="Maiuscole e minuscole" aria-pressed={cs}>Aa</button>
-    <button class="opt" class:on={regex} onclick={() => (regex = !regex)} title="Espressione regolare" aria-pressed={regex}>.*</button>
+    <button class="opt" class:on={regex} onclick={() => (ws.searchRegex = !ws.searchRegex)} title="Espressione regolare" aria-pressed={regex}>.*</button>
   </div>
   {#if error}<p class="msg err">{error}</p>
   {:else if busy && !results.length}<p class="msg">Cerco…</p>

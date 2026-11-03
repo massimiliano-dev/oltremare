@@ -155,6 +155,9 @@
     <div class="sec side">
       <button class:on={ws.sidebar === "files"} onclick={() => (ws.sidebar = "files")} title="File del progetto"><Icon name="folder" size={12} /> {ws.project?.name ?? "Esplora"}</button>
       <button class:on={ws.sidebar === "search"} onclick={() => (ws.sidebar = "search")} title="Cerca nel progetto (⌘⇧F)" aria-label="Cerca nel progetto"><Icon name="search" size={12} /></button>
+      <button class:on={ws.sidebar === "problems"} onclick={() => { ws.sidebar = "problems"; if (!ws.checkedAt) ws.runCheck(); }} title="Problemi: errori del compilatore" aria-label="Problemi">
+        <Icon name="alert" size={12} />{#if ws.problems.length}<span class="pcount" class:err={ws.problems.some((p) => p.severity === "error")}>{ws.problems.length}</span>{/if}
+      </button>
       {#if ws.sidebar === "files"}
         <span class="sp"></span>
         <button onclick={() => chiedi("file", null)} title="Nuovo file" aria-label="Nuovo file"><Icon name="plus" size={12} /></button>
@@ -169,6 +172,23 @@
     {/if}
     {#if ws.sidebar === "search"}
       <SearchPanel />
+    {:else if ws.sidebar === "problems"}
+      <div class="probs">
+        <div class="phead">
+          <small>{ws.checking ? "Controllo in corso…" : ws.checkedAt ? `${ws.checkTools.join(", ") || "nessuno strumento trovato"} · ${new Date(ws.checkedAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}` : "Controlla il progetto con i suoi strumenti"}</small>
+          <button class="btn btn-quiet sm" onclick={() => ws.runCheck()} disabled={ws.checking}><Icon name="refresh" size={12} /> Controlla</button>
+        </div>
+        {#if ws.checkedAt && !ws.checking && !ws.problems.length}
+          <p class="pok"><Icon name="check" size={12} /> {ws.checkTools.length ? "Nessun problema" : "Nessun controllo disponibile (tsc, svelte-check o cargo con le dipendenze installate)"}</p>
+        {/if}
+        {#each ws.problems as p, i (i)}
+          <button class="prow" onclick={() => ws.openFile(p.path, p.line, p.col)} title={p.message}>
+            <span class="sev sev-{p.severity}"></span>
+            <span class="pm">{p.message}</span>
+            <span class="pf">{rel(p.path).split("/").pop()}:{p.line}</span>
+          </button>
+        {/each}
+      </div>
     {:else if ws.dev.folder}<FileTree path={ws.dev.folder} dev={ws.dev} onopen={(p) => ws.openFile(p)} active={ws.dev.tab === "file" ? ws.active : null} onmenu={apriMenu} />{/if}
   </aside>
 
@@ -194,12 +214,13 @@
             <p class="hint">File binario: non si può modificare qui.</p>
           {:else}
             {#key ws.current.path}
-              <CodeEditor path={ws.current.path} value={ws.current.content} onchange={(v) => ws.current && (ws.current.content = v)} onsave={() => ws.save()} goto={ws.goto?.path === ws.current.path ? ws.goto : null} oncursor={(l, c) => (ws.cursor = { line: l, col: c })} />
+              <CodeEditor path={ws.current.path} value={ws.current.content} onchange={(v) => ws.current && (ws.current.content = v)} onsave={() => ws.save()} goto={ws.goto?.path === ws.current.path ? ws.goto : null} oncursor={(l, c, n) => (ws.cursor = { line: l, col: c, cursors: n })} diagnostics={ws.problems.filter((p) => p.path === ws.current?.path)} ondefinition={(n) => n && ws.goToDefinition(n)} />
             {/key}
             <div class="status">
               <span class="sp-path" title={ws.current.path}>{rel(ws.current.path)}</span>
               {#if ws.current.content !== ws.current.saved}<span class="dirty-s">non salvato · ⌘S</span>{/if}
-              <span>Riga {ws.cursor.line}, col {ws.cursor.col}</span>
+              {#if ws.problems.some((p) => p.path === ws.current?.path)}{@const np = ws.problems.filter((p) => p.path === ws.current?.path).length}<button class="sb-prob" onclick={() => (ws.sidebar = "problems")}>{np} {np === 1 ? "problema" : "problemi"}</button>{/if}
+              <span title="F12 o ⌘⌥+clic: vai alla definizione · ⌘D: seleziona la prossima occorrenza · ⌘+clic: aggiungi un cursore">Riga {ws.cursor.line}, col {ws.cursor.col}{ws.cursor.cursors > 1 ? ` · ${ws.cursor.cursors} cursori` : ""}</span>
               <span>{(ws.current.name.split(".").pop() ?? "").toUpperCase()}</span>
             </div>
           {/if}
@@ -416,6 +437,96 @@
     font-size: var(--t-sm);
     color: var(--ink);
     font-family: ui-monospace, Menlo, monospace;
+  }
+  .pcount {
+    min-width: 15px;
+    padding: 0 4px;
+    border-radius: 999px;
+    font-size: 0.6rem;
+    font-weight: 750;
+    color: var(--warn-ink);
+    background: oklch(0.8 0.12 80 / 0.3);
+  }
+  .pcount.err {
+    color: var(--danger);
+    background: var(--danger-wash);
+  }
+  .probs {
+    display: grid;
+    gap: 2px;
+    padding: 6px 4px;
+  }
+  .phead {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px 6px;
+  }
+  .phead small {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+  }
+  .phead .sm {
+    height: 26px;
+    padding: 0 8px;
+    font-size: var(--t-xs);
+    gap: 4px;
+  }
+  .pok {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 4px;
+    font-size: var(--t-xs);
+    color: var(--ok);
+  }
+  .prow {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    padding: 5px 6px;
+    border-radius: 7px;
+    text-align: left;
+    font-size: var(--t-xs);
+  }
+  .prow:hover {
+    background: color-mix(in oklch, var(--accent) 7%, transparent);
+  }
+  .sev {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    margin-top: 4px;
+    border-radius: 50%;
+  }
+  .sev-error {
+    background: var(--danger);
+  }
+  .sev-warning {
+    background: var(--warn);
+  }
+  .pm {
+    flex: 1;
+    min-width: 0;
+    color: var(--ink-2);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .pf {
+    flex: none;
+    color: var(--ink-3);
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.66rem;
+  }
+  .sb-prob {
+    color: var(--danger);
+    font-weight: 600;
+    font-size: 0.7rem;
   }
   .status {
     flex: none;

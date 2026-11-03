@@ -4,7 +4,25 @@
   import type { EditorView } from "codemirror";
   import { theme } from "../state/theme.svelte";
 
-  let { path, value, onchange, onsave, goto = null, oncursor }: { path: string; value: string; onchange: (v: string) => void; onsave: () => void; goto?: { line: number; col: number; n: number } | null; oncursor?: (line: number, col: number) => void } = $props();
+  let {
+    path,
+    value,
+    onchange,
+    onsave,
+    goto = null,
+    oncursor,
+    diagnostics = [],
+    ondefinition,
+  }: {
+    path: string;
+    value: string;
+    onchange: (v: string) => void;
+    onsave: () => void;
+    goto?: { line: number; col: number; n: number } | null;
+    oncursor?: (line: number, col: number, cursors: number) => void;
+    diagnostics?: { line: number; col: number; severity: "error" | "warning"; message: string }[];
+    ondefinition?: (name: string) => void;
+  } = $props();
   let host: HTMLDivElement | undefined = $state();
   let view: EditorView | null = null;
   let applying = false;
@@ -27,12 +45,18 @@
   onMount(() => {
     let disposed = false;
     (async () => {
-      const [{ EditorView, basicSetup }, { keymap }, { EditorState }, { oneDark }] = await Promise.all([
+      const [{ EditorView, basicSetup }, { keymap }, { EditorState }, { oneDark }, { lintGutter }] = await Promise.all([
         import("codemirror"),
         import("@codemirror/view"),
         import("@codemirror/state"),
         import("@codemirror/theme-one-dark"),
+        import("@codemirror/lint"),
       ]);
+      // La parola sotto il cursore (o sotto il clic), per «vai alla definizione»
+      const parola = (st: import("@codemirror/state").EditorState, pos: number) => {
+        const w = st.wordAt(pos);
+        return w ? st.sliceDoc(w.from, w.to) : "";
+      };
       if (disposed || !host) return;
       const lang = await lingua(path);
       const chiaro = EditorView.theme({
@@ -47,7 +71,22 @@
           doc: value,
           extensions: [
             basicSetup,
-            keymap.of([{ key: "Mod-s", preventDefault: true, run: () => (onsave(), true) }]),
+            keymap.of([
+              { key: "Mod-s", preventDefault: true, run: () => (onsave(), true) },
+              { key: "F12", preventDefault: true, run: (v) => (ondefinition?.(parola(v.state, v.state.selection.main.head)), true) },
+            ]),
+            lintGutter(),
+            // ⌘+⌥+clic: vai alla definizione (⌘+clic resta «aggiungi un cursore»)
+            EditorView.domEventHandlers({
+              mousedown: (e, v) => {
+                if (!(e.metaKey && e.altKey) || !ondefinition) return false;
+                const pos = v.posAtCoords({ x: e.clientX, y: e.clientY });
+                if (pos == null) return false;
+                e.preventDefault();
+                ondefinition(parola(v.state, pos));
+                return true;
+              },
+            }),
             chiaro,
             ...(theme.resolved === "dark" ? [oneDark] : []),
             ...(lang ? [lang] : []),
@@ -56,13 +95,14 @@
               if (u.selectionSet || u.docChanged) {
                 const h = u.state.selection.main.head;
                 const l = u.state.doc.lineAt(h);
-                oncursor?.(l.number, h - l.from + 1);
+                oncursor?.(l.number, h - l.from + 1, u.state.selection.ranges.length);
               }
             }),
           ],
         }),
       });
       vai(goto);
+      segnala(diagnostics);
     })();
     return () => {
       disposed = true;
@@ -82,6 +122,25 @@
   }
   $effect(() => {
     vai(goto);
+  });
+
+  // Errori e avvisi del compilatore, sottolineati nel testo
+  async function segnala(d: typeof diagnostics) {
+    if (!view) return;
+    const { setDiagnostics } = await import("@codemirror/lint");
+    const doc = view.state.doc;
+    const lista = d
+      .filter((x) => x.line >= 1 && x.line <= doc.lines)
+      .map((x) => {
+        const l = doc.line(x.line);
+        const from = Math.min(l.from + Math.max(x.col - 1, 0), l.to);
+        const w = view!.state.wordAt(from);
+        return { from, to: w && w.from === from ? w.to : Math.min(from + 1, l.to), severity: x.severity, message: x.message };
+      });
+    view.dispatch(setDiagnostics(view.state, lista));
+  }
+  $effect(() => {
+    segnala(diagnostics);
   });
 
   // Il contenuto cambiato da fuori (Claude ha modificato il file): si aggiorna l'editor

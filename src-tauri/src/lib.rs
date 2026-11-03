@@ -992,6 +992,8 @@ pub fn run() {
             ide::ide_create,
             ide::ide_rename,
             ide::ide_trash,
+            ide::ide_check,
+            ide::ide_definition,
             mcp::studio_permission_answer,
             mcp::studio_permissions,
             studio::memory_seed,
