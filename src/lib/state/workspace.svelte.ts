@@ -383,12 +383,16 @@ export class Workspace {
     this.queue = this.queue.filter((q) => q.id !== id);
   }
 
-  /** Manda il primo messaggio in coda, se Claude è libero. */
+  /** Manda la coda, se Claude è libero: più messaggi partono insieme, come richieste separate in un solo giro. */
   drain() {
     if (this.busy || !this.queue.length) return;
-    const [q, ...rest] = this.queue;
-    this.queue = rest;
-    this.send(q.text, false, q.files, q.follow);
+    const tutti = this.queue;
+    this.queue = [];
+    const files = tutti.flatMap((q) => q.files);
+    const follow = tutti.every((q) => q.follow);
+    if (tutti.length === 1) return this.send(tutti[0].text, false, files, follow);
+    const elenco = tutti.map((q, i) => `${i + 1}. ${q.text || "(solo allegati)"}`).join("\n\n");
+    this.send(`Ti ho scritto ${tutti.length} richieste separate: leggile tutte prima di cominciare, poi falle tutte, nell'ordine, e nel riepilogo rispondi su ciascuna per numero.\n\n${elenco}`, false, files, follow);
   }
 
   /** Interrompe il lavoro in corso (o lascia il piano) e manda subito questo messaggio. */
