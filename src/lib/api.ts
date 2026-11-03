@@ -220,6 +220,19 @@ export interface TeamAgent {
   durationMs?: number | null;
 }
 
+/** Un passo del lavoro di un sotto-agente: l'incarico, un suo messaggio o un'azione con l'esito. */
+export interface AgentStep {
+  kind: "prompt" | "text" | "tool";
+  text?: string;
+  tool?: string;
+  title?: string;
+  input?: string;
+  result?: string;
+  error?: boolean;
+  at: number;
+  endedAt?: number;
+}
+
 export interface TeamInfo {
   session: string | null;
   running: boolean;
@@ -664,6 +677,7 @@ export const api = {
   studioOpen: (project?: string, prompt?: string) => invoke<void>("studio_open", { project, prompt }),
   studioClassify: (project: string, text: string, context?: string) => invoke<StudioDecision>("studio_classify", { project, text, context }),
   studioClaudex: () => invoke<ClaudexInfo>("studio_claudex"),
+  studioAgentLog: (project: string, agentId: string, session?: string | null) => invoke<AgentStep[]>("studio_agent_log", { project, agentId, session: session ?? undefined }),
   studioTeam: (project: string, session?: string | null) => invoke<TeamInfo>("studio_team", { project, session: session ?? undefined }),
   studioAgents: (project: string) => invoke<AgentDef[]>("studio_agents", { project }),
   claudePlugins: () => invoke<ClaudePlugin[]>("claude_plugins"),

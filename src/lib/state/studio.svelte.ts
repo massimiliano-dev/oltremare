@@ -86,7 +86,7 @@ class StudioState {
     const path = await api.studioCreateProject(root, name, description);
     await this.loadProjects();
     const prompt = description.trim()
-      ? `Nuovo progetto, cartella vuota (c'è solo il README). Costruiscilo: ${description.trim()}\nScegli uno stack moderno e adatto, crea lo scheletro funzionante con i comandi di avvio, build e test, fai il primo commit e scrivi nel README come avviarlo. La grafica conta quanto il codice: prima di scrivere l'interfaccia carica la skill impeccable (e design-taste-frontend se c'è) e dai al progetto un'identità visiva curata fin da subito, poi controlla il risultato nel browser.`
+      ? `Nuovo progetto, cartella vuota (c'è solo il README). Costruiscilo: ${description.trim()}\nScegli uno stack moderno e adatto, crea lo scheletro funzionante con i comandi di avvio, build e test, fai il primo commit e scrivi nel README come avviarlo. La grafica conta quanto il codice: prima di scrivere l'interfaccia carica la skill impeccable (e design-taste-frontend se c'è) e dai al progetto un'identità visiva curata fin da subito, scritta in PRODUCT.md e DESIGN.md nella radice, poi controlla il risultato nel browser con Claude in Chrome.`
       : undefined;
     await this.open(path, { prompt });
   }

@@ -6,7 +6,7 @@
   import ToolGlyph, { toolKind } from "./ToolGlyph.svelte";
   import { markdown } from "../markdown";
   import type { Workspace as WS } from "../state/workspace.svelte";
-  import type { TeamAgent } from "../api";
+  import { api, errorText, type AgentStep, type TeamAgent } from "../api";
 
   const ws = getContext<WS>("ws");
 
@@ -15,6 +15,43 @@
   const task = $derived(ws.lastTask);
   const running = $derived(!!ws.dev.session?.running);
   let open = $state<Record<string, boolean>>({});
+
+  // Il lavoro di un singolo agente, passo per passo, nella colonna di destra
+  let selId = $state<string | null>(null);
+  const sel = $derived(agents.find((a) => a.toolUseId === selId) ?? null);
+  let log = $state<AgentStep[]>([]);
+  let logError = $state("");
+  let logBox: HTMLElement | undefined = $state();
+
+  async function loadLog(a: TeamAgent) {
+    if (!a.agentId) return;
+    const giu = !logBox || logBox.scrollHeight - logBox.scrollTop - logBox.clientHeight < 80;
+    try {
+      const passi = await api.studioAgentLog(ws.path, a.agentId, ws.team?.session);
+      if (selId !== a.toolUseId) return;
+      log = passi;
+      logError = "";
+    } catch (e) {
+      logError = errorText(e);
+    }
+    // Chi sta seguendo in fondo resta in fondo mentre l'agente lavora
+    if (giu) requestAnimationFrame(() => logBox?.scrollTo({ top: logBox.scrollHeight }));
+  }
+
+  $effect(() => {
+    const a = sel;
+    if (!a?.agentId) return;
+    loadLog(a);
+    if (!a.running) return;
+    const t = setInterval(() => loadLog(a), 2500);
+    return () => clearInterval(t);
+  });
+
+  function segui(a: TeamAgent) {
+    log = [];
+    logError = "";
+    selId = selId === a.toolUseId ? null : a.toolUseId;
+  }
 
   /** Tipo di agente → etichetta e colore */
   function tipo(t: string): { label: string; h: number } {
@@ -83,7 +120,7 @@
 </script>
 
 <div class="twrap">
-<div class="team">
+<div class="team" class:detail={!!sel}>
   <section class="org" aria-label="Chi sta lavorando">
     <article class="node senior" class:live={senior.live} style="--h:{senior.h}">
       <header>
@@ -105,7 +142,7 @@
       <div class="agents">
         {#each agents as a (a.toolUseId)}
           {@const t = tipo(a.type)}
-          <article class="node agent" class:live={a.running} class:bad={a.error} style="--h:{t.h}">
+          <article class="node agent" class:live={a.running} class:bad={a.error} class:sel={selId === a.toolUseId} style="--h:{t.h}">
             <header>
               <span class="av"><Icon name={a.type.includes("frontend") ? "palette" : a.type.includes("backend") ? "cpu" : "users"} size={15} /></span>
               <div class="who">
@@ -123,6 +160,11 @@
               </ol>
             {/if}
             {#if a.running && a.progress}<p class="prog">{a.progress}</p>{/if}
+            {#if a.agentId}
+              <button class="see" class:on={selId === a.toolUseId} onclick={() => segui(a)} aria-pressed={selId === a.toolUseId}>
+                <Icon name="rows" size={12} /> {selId === a.toolUseId ? "Chiudi il dettaglio" : a.running ? "Segui il lavoro" : "Vedi cosa ha fatto"}
+              </button>
+            {/if}
             {#if a.report}
               <button class="rep" onclick={() => (open[a.toolUseId] = !open[a.toolUseId])} aria-expanded={!!open[a.toolUseId]}>
                 <Icon name={open[a.toolUseId] ? "down" : "chevron"} size={11} /> Rapporto
@@ -176,6 +218,43 @@
     {/if}
   </section>
 
+  {#if sel}
+    {@const t = tipo(sel.type)}
+    <aside class="feed log" aria-label="Il lavoro di {t.label}" style="--h:{t.h}" bind:this={logBox}>
+      <div class="lh">
+        <h3>{t.label}: {sel.description}</h3>
+        <button class="icon-btn" onclick={() => (selId = null)} title="Torna agli scambi" aria-label="Torna agli scambi"><Icon name="x" size={13} /></button>
+      </div>
+      <p class="meta">{sel.running ? "Al lavoro" : sel.error ? "Non riuscito" : "Concluso"} · {sel.toolUses} {sel.toolUses === 1 ? "azione" : "azioni"}{durata(sel) ? ` · ${durata(sel)}` : ""}</p>
+      {#if logError}<p class="none">Lettura non riuscita: {logError}</p>
+      {:else if !log.length}<p class="none">Leggo il suo lavoro…</p>{/if}
+      <ol class="steps-log">
+        {#each log as p, i (i)}
+          {#if p.kind === "prompt"}
+            <li class="l-prompt">
+              <details>
+                <summary>Incarico dal senior</summary>
+                <div class="md">{@html markdown(p.text ?? "")}</div>
+              </details>
+            </li>
+          {:else if p.kind === "text"}
+            <li class="l-text"><div class="md">{@html markdown(p.text ?? "")}</div><time>{ora(p.at)}</time></li>
+          {:else}
+            <li class="l-tool" class:err={p.error} class:wait={p.result === undefined && sel.running}>
+              <details>
+                <summary><ToolGlyph kind={toolKind(p.tool ?? "")} size={16} /><span class="tt">{p.title || p.tool}</span><span class="tn">{p.tool}</span></summary>
+                {#if p.input}<pre>{p.input}</pre>{/if}
+                {#if p.result !== undefined}<pre class="res">{p.result || "(nessun output)"}</pre>{:else}<p class="none">{sel.running ? "In corso…" : "Nessun esito"}</p>{/if}
+              </details>
+            </li>
+          {/if}
+        {/each}
+      </ol>
+      {#if sel.report}
+        <div class="md rtext final">{@html markdown(sel.report)}</div>
+      {/if}
+    </aside>
+  {:else}
   <aside class="feed" aria-label="Scambi tra gli agenti">
     <h3>Scambi</h3>
     <p class="meta">
@@ -196,6 +275,7 @@
       </ol>
     {/if}
   </aside>
+  {/if}
 </div>
 </div>
 
@@ -220,6 +300,9 @@
     .team {
       grid-template-columns: 1fr;
       grid-template-rows: minmax(0, 1fr) minmax(150px, 40%);
+    }
+    .team.detail {
+      grid-template-rows: minmax(0, 40%) minmax(0, 1fr);
     }
     .feed {
       border-left: 0 !important;
@@ -529,11 +612,145 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+  @container (min-width: 821px) {
+    .team.detail {
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 44%);
+    }
+  }
+  .node.sel {
+    box-shadow: inset 0 0 0 1.5px oklch(0.6 0.15 var(--h)), 0 0 0 4px oklch(0.65 0.14 var(--h) / 0.14);
+  }
+  .see {
+    justify-self: start;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: var(--t-xs);
+    font-weight: 600;
+    color: oklch(0.45 0.13 var(--h));
+    background: oklch(0.75 0.12 var(--h) / 0.14);
+  }
+  .see:hover,
+  .see.on {
+    background: oklch(0.75 0.12 var(--h) / 0.26);
+  }
+  :global([data-theme="dark"]) .see {
+    color: oklch(0.85 0.11 var(--h));
+  }
+  .lh {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .lh h3 {
+    flex: 1;
+    min-width: 0;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: var(--t-sm);
+    line-height: 1.35;
+  }
+  .steps-log {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+  }
+  .steps-log li {
+    min-width: 0;
+    border-radius: 9px;
+    background: var(--paper);
+    font-size: var(--t-xs);
+  }
+  .steps-log summary {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 10px;
+    cursor: pointer;
+    list-style: none;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .steps-log summary::-webkit-details-marker {
+    display: none;
+  }
+  .tt {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tn {
+    flex: none;
+    font-weight: 500;
+    color: var(--ink-3);
+  }
+  .l-text {
+    display: grid;
+    gap: 2px;
+    padding: 8px 10px;
+    color: var(--ink-2);
+    box-shadow: inset 2px 0 0 oklch(0.65 0.14 var(--h));
+  }
+  .l-text time {
+    justify-self: end;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .l-prompt .md,
+  .l-tool pre,
+  .l-tool .none {
+    margin: 0 10px 8px;
+  }
+  .l-prompt .md {
+    max-height: 320px;
+    overflow: auto;
+    color: var(--ink-2);
+  }
+  .l-tool pre {
+    max-height: 240px;
+    overflow: auto;
+    padding: 7px 9px;
+    border-radius: 7px;
+    background: var(--paper-2);
+    font: 0.7rem/1.45 ui-monospace, "SF Mono", Menlo, monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--ink-2);
+  }
+  .l-tool pre.res {
+    color: var(--ink);
+  }
+  .l-tool.err {
+    box-shadow: inset 2px 0 0 var(--danger);
+  }
+  .l-tool.err pre.res {
+    color: var(--danger);
+  }
+  .l-tool.wait summary {
+    animation: attesa 1.4s ease-in-out infinite;
+  }
+  @keyframes attesa {
+    50% {
+      opacity: 0.55;
+    }
+  }
+  .final {
+    margin-top: 10px;
+    max-height: none;
+    box-shadow: inset 2px 0 0 var(--ok);
+  }
   .f-report {
     box-shadow: inset 2px 0 0 oklch(0.65 0.14 var(--h));
   }
   @media (prefers-reduced-motion: reduce) {
     .live .dot,
+    .l-tool.wait summary,
     .rail.live {
       animation: none;
     }

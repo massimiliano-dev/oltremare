@@ -58,7 +58,7 @@ export class DevState {
     if (this.folder) this.loadAll();
     this.timers.push(setInterval(() => this.refreshSession(), 1500));
     this.timers.push(setInterval(() => this.refreshProcesses(), 2000));
-    this.timers.push(setInterval(() => this.refreshGit(), 4000));
+    this.timers.push(setInterval(() => (this.refreshGit(), this.refreshTree()), 4000));
   }
 
   stop() {
@@ -111,6 +111,18 @@ export class DevState {
 
   async loadDir(path: string) {
     this.tree[path] = await api.devTree(path).catch(() => []);
+  }
+
+  /** Rilegge le cartelle visibili: i file creati o tolti da Claude, dagli agenti o dal terminale compaiono da soli. */
+  async refreshTree() {
+    if (!this.folder) return;
+    const visibili = Object.keys(this.tree).filter((p) => p === this.folder || this.expanded[p]);
+    await Promise.all(
+      visibili.map(async (p) => {
+        const nuove = await api.devTree(p).catch(() => null);
+        if (nuove && JSON.stringify(nuove) !== JSON.stringify(this.tree[p])) this.tree[p] = nuove;
+      }),
+    );
   }
 
   async toggleDir(path: string) {

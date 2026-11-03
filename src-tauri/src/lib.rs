@@ -985,6 +985,7 @@ pub fn run() {
             studio::studio_claudex,
             studio::studio_review,
             squadra::studio_team,
+            squadra::studio_agent_log,
             squadra::studio_agents,
             squadra::claude_plugins,
             ide::ide_files,
