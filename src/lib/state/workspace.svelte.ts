@@ -116,6 +116,12 @@ export class Workspace {
   private taskId = 0;
   private queueId = 0;
 
+  /** Mini IDE: riga a cui saltare nel file aperto, barra laterale, apertura rapida, posizione del cursore */
+  goto = $state<{ path: string; line: number; col: number; n: number } | null>(null);
+  sidebar = $state<"files" | "search">("files");
+  quickOpen = $state(false);
+  cursor = $state({ line: 1, col: 1 });
+
   current = $derived(this.files.find((f) => f.path === this.active) ?? null);
   lastTask = $derived(this.tasks.at(-1) ?? null);
   /** Claude (o il CTO) lavora, o c'è un piano da approvare: i nuovi messaggi aspettano */
@@ -178,7 +184,8 @@ export class Workspace {
 
   // ---------- Editor ----------
 
-  async openFile(path: string) {
+  async openFile(path: string, line?: number, col = 1) {
+    if (line) this.goto = { path, line, col, n: (this.goto?.n ?? 0) + 1 };
     if (!this.files.some((f) => f.path === path)) {
       try {
         const f = await api.devFile(path);
@@ -501,6 +508,54 @@ export class Workspace {
       t.opinion = await api.studioSecondOpinion(this.path, profile, about, t.planText);
     } catch (e) {
       t.opinion = `Non è riuscito: ${errorText(e)}`;
+    }
+  }
+
+  // ---------- File (menu dell'albero) ----------
+
+  private async ricarica(p: string) {
+    const madre = p.slice(0, Math.max(p.lastIndexOf("/"), 0)) || this.path;
+    await this.dev.loadDir(madre);
+    this.dev.refreshGit();
+  }
+
+  async createEntry(dir: string, name: string, isDir: boolean) {
+    try {
+      const p = await api.ideCreate(this.path, `${dir}/${name.trim()}`, isDir);
+      this.dev.expanded[dir] = true;
+      await this.ricarica(p);
+      if (!isDir) this.openFile(p);
+    } catch (e) {
+      ui.toast(errorText(e), "error");
+    }
+  }
+
+  async renameEntry(from: string, name: string) {
+    try {
+      const to = await api.ideRename(this.path, from, `${from.slice(0, from.lastIndexOf("/"))}/${name.trim()}`);
+      // I file aperti seguono il nuovo nome
+      for (const f of this.files) {
+        if (f.path === from || f.path.startsWith(from + "/")) {
+          const np = to + f.path.slice(from.length);
+          if (this.active === f.path) this.active = np;
+          f.path = np;
+          f.name = np.split("/").pop() ?? np;
+        }
+      }
+      await this.ricarica(to);
+    } catch (e) {
+      ui.toast(errorText(e), "error");
+    }
+  }
+
+  async trashEntry(p: string) {
+    try {
+      await api.ideTrash(this.path, p);
+      for (const f of [...this.files]) if (f.path === p || f.path.startsWith(p + "/")) this.closeFile(f.path);
+      await this.ricarica(p);
+      ui.toast("Spostato nel Cestino");
+    } catch (e) {
+      ui.toast(errorText(e), "error");
     }
   }
 }

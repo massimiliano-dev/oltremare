@@ -4,7 +4,7 @@
   import type { EditorView } from "codemirror";
   import { theme } from "../state/theme.svelte";
 
-  let { path, value, onchange, onsave }: { path: string; value: string; onchange: (v: string) => void; onsave: () => void } = $props();
+  let { path, value, onchange, onsave, goto = null, oncursor }: { path: string; value: string; onchange: (v: string) => void; onsave: () => void; goto?: { line: number; col: number; n: number } | null; oncursor?: (line: number, col: number) => void } = $props();
   let host: HTMLDivElement | undefined = $state();
   let view: EditorView | null = null;
   let applying = false;
@@ -53,15 +53,35 @@
             ...(lang ? [lang] : []),
             EditorView.updateListener.of((u) => {
               if (u.docChanged && !applying) onchange(u.state.doc.toString());
+              if (u.selectionSet || u.docChanged) {
+                const h = u.state.selection.main.head;
+                const l = u.state.doc.lineAt(h);
+                oncursor?.(l.number, h - l.from + 1);
+              }
             }),
           ],
         }),
       });
+      vai(goto);
     })();
     return () => {
       disposed = true;
       view?.destroy();
     };
+  });
+
+  // Salto a una riga (ricerca nel progetto): cursore lì, riga al centro
+  async function vai(g: { line: number; col: number } | null) {
+    if (!g || !view) return;
+    const { EditorView: EV } = await import("@codemirror/view");
+    const doc = view.state.doc;
+    const l = doc.line(Math.min(Math.max(g.line, 1), doc.lines));
+    const pos = Math.min(l.from + Math.max(g.col - 1, 0), l.to);
+    view.dispatch({ selection: { anchor: pos }, effects: EV.scrollIntoView(pos, { y: "center" }) });
+    view.focus();
+  }
+  $effect(() => {
+    vai(goto);
   });
 
   // Il contenuto cambiato da fuori (Claude ha modificato il file): si aggiorna l'editor

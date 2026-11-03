@@ -158,6 +158,8 @@ pub struct Opzioni {
     pub solo_lettura: bool,
     /// Tetto ai turni (piani e revisioni devono restare rapidi)
     pub max_turns: Option<u32>,
+    /// Quanto ragiona Claude (--effort: low, medium, high, xhigh, max); vuoto = predefinito
+    pub effort: String,
 }
 
 /// Strumenti per chi deve solo leggere e verificare (il CTO che rivede, un secondo parere)
@@ -210,6 +212,9 @@ pub(crate) fn comando_headless_con(bin: &Path, cartella: &Path, messaggio: &str,
     }
     if let Some(n) = o.max_turns {
         cmd.args(["--max-turns", &n.to_string()]);
+    }
+    if !o.effort.is_empty() {
+        cmd.args(["--effort", &o.effort]);
     }
     if !vietati.is_empty() {
         cmd.arg("--disallowedTools").arg(vietati.join(","));

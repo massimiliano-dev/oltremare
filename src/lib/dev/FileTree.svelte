@@ -6,7 +6,7 @@
   import FileTree from "./FileTree.svelte";
   import { dev as principale, type DevState } from "../state/dev.svelte";
 
-  let { path, depth = 0, onopen, active = null, dev: d = principale }: { path: string; depth?: number; onopen?: (p: string) => void; active?: string | null; dev?: DevState } = $props();
+  let { path, depth = 0, onopen, active = null, dev: d = principale, onmenu }: { path: string; depth?: number; onopen?: (p: string) => void; active?: string | null; dev?: DevState; onmenu?: (e: MouseEvent, entry: { name: string; path: string; dir: boolean }) => void } = $props();
   const entries = $derived(d.tree[path] ?? []);
   const apri = (p: string) => (onopen ? onopen(p) : d.openFile(p));
   const corrente = $derived(active ?? d.file?.path ?? null);
@@ -22,7 +22,7 @@
     <li role="treeitem" aria-expanded={e.dir ? !!d.expanded[e.path] : undefined} aria-selected={!e.dir && corrente === e.path}>
       {#if e.dir}
         {@const n = cambiate(e.path)}
-        <button class="row dir" class:open={d.expanded[e.path]} onclick={() => d.toggleDir(e.path)}>
+        <button class="row dir" class:open={d.expanded[e.path]} onclick={() => d.toggleDir(e.path)} oncontextmenu={(ev) => onmenu && (ev.preventDefault(), onmenu(ev, e))}>
           <svg class="chev" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 2 6.5 5l-3 3" /></svg>
           <FileIcon name={e.name} folder open={!!d.expanded[e.path]} />
           <span class="name">{e.name}</span>
@@ -33,12 +33,12 @@
             {#if d.tree[e.path] && !d.tree[e.path].length}
               <p class="vuota" style="--d:{depth + 1}">cartella vuota</p>
             {:else}
-              <FileTree path={e.path} depth={depth + 1} {onopen} {active} dev={d} />
+              <FileTree path={e.path} depth={depth + 1} {onopen} {active} dev={d} {onmenu} />
             {/if}
           </div>
         {/if}
       {:else}
-        <button class="row file" class:on={corrente === e.path} class:ch={!!st} onclick={() => apri(e.path)} title={st ? `${e.name} · ${STATUS[st] ?? st}` : e.name}>
+        <button class="row file" class:on={corrente === e.path} class:ch={!!st} onclick={() => apri(e.path)} oncontextmenu={(ev) => onmenu && (ev.preventDefault(), onmenu(ev, e))} title={st ? `${e.name} · ${STATUS[st] ?? st}` : e.name}>
           <span class="chev-sp"></span>
           <FileIcon name={e.name} />
           <span class="name">{e.name}</span>

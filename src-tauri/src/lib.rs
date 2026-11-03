@@ -7,6 +7,7 @@ mod dev;
 mod error;
 mod finestre;
 mod git;
+mod ide;
 mod isola;
 mod mcp;
 mod mcp_client;
@@ -986,6 +987,11 @@ pub fn run() {
             squadra::studio_team,
             squadra::studio_agents,
             squadra::claude_plugins,
+            ide::ide_files,
+            ide::ide_search,
+            ide::ide_create,
+            ide::ide_rename,
+            ide::ide_trash,
             mcp::studio_permission_answer,
             mcp::studio_permissions,
             studio::memory_seed,

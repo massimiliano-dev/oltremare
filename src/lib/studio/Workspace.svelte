@@ -10,7 +10,10 @@
   import Terminal from "./Terminal.svelte";
   import Team from "./Team.svelte";
   import MemoryGraph from "../memory/MemoryGraph.svelte";
+  import QuickOpen from "./QuickOpen.svelte";
+  import SearchPanel from "./SearchPanel.svelte";
   import { setContext } from "svelte";
+  import { studio } from "../state/studio.svelte";
   import type { Workspace as WS } from "../state/workspace.svelte";
 
   let { ws }: { ws: WS } = $props();
@@ -73,6 +76,28 @@
     e.preventDefault();
     imposta(k, (k === "left" ? left : right) + (k === "left" ? verso : -verso) * passo);
   }
+  // Menu dell'albero (tasto destro) e richiesta del nome per nuovo/rinomina
+  let menu = $state<{ x: number; y: number; entry: { name: string; path: string; dir: boolean } } | null>(null);
+  let naming = $state<{ kind: "file" | "dir" | "rename"; dir: string; from?: string; value: string } | null>(null);
+  let nameInput: HTMLInputElement | undefined = $state();
+  function apriMenu(e: MouseEvent, entry: { name: string; path: string; dir: boolean }) {
+    menu = { x: e.clientX, y: e.clientY, entry };
+  }
+  function chiedi(kind: "file" | "dir" | "rename", entry: { name: string; path: string; dir: boolean } | null) {
+    menu = null;
+    const dir = entry ? (entry.dir ? entry.path : entry.path.slice(0, entry.path.lastIndexOf("/"))) : ws.path;
+    naming = kind === "rename" && entry ? { kind, dir, from: entry.path, value: entry.name } : { kind, dir, value: "" };
+    requestAnimationFrame(() => nameInput?.select());
+  }
+  function conferma() {
+    const n = naming;
+    naming = null;
+    if (!n || !n.value.trim() || n.value.includes("..")) return;
+    if (n.kind === "rename" && n.from) ws.renameEntry(n.from, n.value);
+    else ws.createEntry(n.dir, n.value, n.kind === "dir");
+  }
+  const rel = (p: string) => (p.startsWith(ws.path) ? p.slice(ws.path.length + 1) : p);
+
   // Terminali del progetto (la shell dell'utente) accanto ai processi avviati dall'orchestratore
   let terms = $state<{ id: number; name: string; ended: boolean }[]>([]);
   let termN = 0;
@@ -91,8 +116,19 @@
     if (termSel === id) ws.dev.bottom = terms.at(-1) ? `term:${terms.at(-1)!.id}` : null;
   }
 
-  // ⌃` mostra o nasconde il terminale, come negli editor
+  // ⌃` mostra o nasconde il terminale, come negli editor; ⌘⇧F cerca nel progetto
   function tasto(e: KeyboardEvent) {
+    if (studio.tab !== ws) return;
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      ws.sidebar = "search";
+      return;
+    }
+    if (e.key === "Escape" && (menu || naming)) {
+      menu = null;
+      naming = null;
+      return;
+    }
     if (e.ctrlKey && e.key === "`") {
       e.preventDefault();
       if (!terms.length) nuovoTerminale();
@@ -116,8 +152,24 @@
   <aside class="explorer">
     <IssuesPanel />
     <SourceControl />
-    <div class="sec"><Icon name="folder" size={12} /> {ws.project?.name ?? "Esplora"}</div>
-    {#if ws.dev.folder}<FileTree path={ws.dev.folder} dev={ws.dev} onopen={(p) => ws.openFile(p)} active={ws.dev.tab === "file" ? ws.active : null} />{/if}
+    <div class="sec side">
+      <button class:on={ws.sidebar === "files"} onclick={() => (ws.sidebar = "files")} title="File del progetto"><Icon name="folder" size={12} /> {ws.project?.name ?? "Esplora"}</button>
+      <button class:on={ws.sidebar === "search"} onclick={() => (ws.sidebar = "search")} title="Cerca nel progetto (⌘⇧F)" aria-label="Cerca nel progetto"><Icon name="search" size={12} /></button>
+      {#if ws.sidebar === "files"}
+        <span class="sp"></span>
+        <button onclick={() => chiedi("file", null)} title="Nuovo file" aria-label="Nuovo file"><Icon name="plus" size={12} /></button>
+        <button onclick={() => chiedi("dir", null)} title="Nuova cartella" aria-label="Nuova cartella"><Icon name="folder" size={12} /><Icon name="plus" size={9} /></button>
+      {/if}
+    </div>
+    {#if naming}
+      <form class="naming" onsubmit={(e) => (e.preventDefault(), conferma())}>
+        <small>{naming.kind === "rename" ? "Nuovo nome" : naming.kind === "dir" ? "Nuova cartella" : "Nuovo file"} in {rel(naming.dir) || ws.project.name}</small>
+        <input bind:this={nameInput} bind:value={naming.value} placeholder={naming.kind === "dir" ? "nome-cartella" : "nome.ts"} onblur={() => setTimeout(() => (naming = null), 150)} aria-label="Nome" />
+      </form>
+    {/if}
+    {#if ws.sidebar === "search"}
+      <SearchPanel />
+    {:else if ws.dev.folder}<FileTree path={ws.dev.folder} dev={ws.dev} onopen={(p) => ws.openFile(p)} active={ws.dev.tab === "file" ? ws.active : null} onmenu={apriMenu} />{/if}
   </aside>
 
   <section class="center">
@@ -142,8 +194,14 @@
             <p class="hint">File binario: non si può modificare qui.</p>
           {:else}
             {#key ws.current.path}
-              <CodeEditor path={ws.current.path} value={ws.current.content} onchange={(v) => ws.current && (ws.current.content = v)} onsave={() => ws.save()} />
+              <CodeEditor path={ws.current.path} value={ws.current.content} onchange={(v) => ws.current && (ws.current.content = v)} onsave={() => ws.save()} goto={ws.goto?.path === ws.current.path ? ws.goto : null} oncursor={(l, c) => (ws.cursor = { line: l, col: c })} />
             {/key}
+            <div class="status">
+              <span class="sp-path" title={ws.current.path}>{rel(ws.current.path)}</span>
+              {#if ws.current.content !== ws.current.saved}<span class="dirty-s">non salvato · ⌘S</span>{/if}
+              <span>Riga {ws.cursor.line}, col {ws.cursor.col}</span>
+              <span>{(ws.current.name.split(".").pop() ?? "").toUpperCase()}</span>
+            </div>
           {/if}
         {:else}
           <div class="welcome">
@@ -197,6 +255,21 @@
   </section>
 
   <Orchestrator />
+  {#if ws.quickOpen && studio.tab === ws}<QuickOpen />{/if}
+  {#if menu}
+    <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+    <div class="mscrim" onclick={() => (menu = null)} oncontextmenu={(e) => (e.preventDefault(), (menu = null))}></div>
+    <div class="ctx" style="left:{menu.x}px; top:{menu.y}px" role="menu">
+      {#if !menu.entry.dir}<button role="menuitem" onclick={() => { ws.openFile(menu!.entry.path); menu = null; }}>Apri</button>{/if}
+      <button role="menuitem" onclick={() => chiedi("file", menu!.entry)}>Nuovo file…</button>
+      <button role="menuitem" onclick={() => chiedi("dir", menu!.entry)}>Nuova cartella…</button>
+      <hr />
+      <button role="menuitem" onclick={() => chiedi("rename", menu!.entry)}>Rinomina…</button>
+      <button role="menuitem" onclick={() => { navigator.clipboard?.writeText(rel(menu!.entry.path)); menu = null; }}>Copia percorso</button>
+      <hr />
+      <button role="menuitem" class="danger" onclick={() => { const p = menu!.entry.path; menu = null; ws.trashEntry(p); }}>Sposta nel Cestino</button>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -294,6 +367,116 @@
     font-weight: 750;
     color: var(--warn-ink);
     background: oklch(0.8 0.12 80 / 0.3);
+  }
+  .sec.side {
+    gap: 2px;
+    margin: 10px 4px 4px;
+  }
+  .sec.side button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    padding: 0 7px;
+    border-radius: 6px;
+    font-size: var(--t-xs);
+    font-weight: 700;
+    color: var(--ink-3);
+  }
+  .sec.side button.on {
+    color: var(--ink);
+    background: color-mix(in oklch, var(--accent) 10%, transparent);
+  }
+  .sec.side button:hover {
+    color: var(--ink);
+  }
+  .sec.side .sp {
+    flex: 1;
+  }
+  .naming {
+    display: grid;
+    gap: 4px;
+    margin: 4px 6px 8px;
+    padding: 8px;
+    border-radius: 9px;
+    background: var(--paper);
+    box-shadow: inset 0 0 0 1.5px var(--accent);
+  }
+  .naming small {
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .naming input {
+    border: 0;
+    outline: none;
+    background: none;
+    font-size: var(--t-sm);
+    color: var(--ink);
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .status {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    height: 24px;
+    padding: 0 12px;
+    border-top: 1px solid var(--rule-soft);
+    background: var(--paper-2);
+    font-size: 0.7rem;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .sp-path {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: left;
+  }
+  .dirty-s {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .mscrim {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+  }
+  .ctx {
+    position: fixed;
+    z-index: 61;
+    min-width: 190px;
+    padding: 5px;
+    border-radius: 10px;
+    background: var(--paper);
+    box-shadow:
+      0 0 0 1px var(--rule),
+      0 12px 30px -10px oklch(0.2 0.06 var(--tint-h) / 0.35);
+    display: grid;
+  }
+  .ctx button {
+    padding: 6px 10px;
+    border-radius: 6px;
+    text-align: left;
+    font-size: var(--t-sm);
+  }
+  .ctx button:hover {
+    background: color-mix(in oklch, var(--accent) 10%, transparent);
+  }
+  .ctx .danger {
+    color: var(--danger);
+  }
+  .ctx hr {
+    border: 0;
+    height: 1px;
+    margin: 4px 2px;
+    background: var(--rule-soft);
   }
   .center {
     min-width: 0;

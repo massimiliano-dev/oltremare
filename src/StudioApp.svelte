@@ -42,6 +42,11 @@
     const mod = e.metaKey || e.ctrlKey;
     if (!mod) return;
     if (e.key.toLowerCase() === "p" && !e.shiftKey) {
+      // ⌘P: apri un file del progetto; senza progetti aperti, l'elenco dei progetti
+      e.preventDefault();
+      if (studio.tab) studio.tab.quickOpen = true;
+      else studio.picker();
+    } else if (e.key.toLowerCase() === "p" && e.shiftKey) {
       e.preventDefault();
       studio.picker();
     } else if (e.shiftKey && (e.key === "]" || e.key === "}")) {
@@ -80,7 +85,7 @@
           </div>
         {/each}
       </nav>
-      <button class="padd" class:on={!studio.tab} onclick={() => studio.picker()} title="Apri un altro progetto (⌘P)" aria-label="Apri un altro progetto"><Icon name="plus" size={14} /></button>
+      <button class="padd" class:on={!studio.tab} onclick={() => studio.picker()} title="Apri un altro progetto (⌘⇧P)" aria-label="Apri un altro progetto"><Icon name="plus" size={14} /></button>
     {/if}
     {#if studio.tab?.git.state?.repo}
       {@const g = studio.tab.git.state}

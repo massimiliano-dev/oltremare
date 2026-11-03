@@ -602,6 +602,7 @@ pub async fn studio_review(handle: AppHandle, project: String, text: String, mod
         modo: "default".into(),
         solo_lettura: true,
         max_turns: Some(25),
+        effort: String::new(),
         ambiente,
         istruzioni: format!("{CTO}{}", memoria.unwrap_or_default()),
         cartelle: vec![],
@@ -742,6 +743,12 @@ pub async fn studio_run(handle: AppHandle, project: String, text: String, model:
         cartelle,
         solo_lettura: false,
         max_turns: if plan { Some(30) } else { None },
+        // Più ragionamento dove conta: Fable al massimo utile, Opus alto, il resto predefinito
+        effort: match model.as_str() {
+            "fable" => "xhigh".into(),
+            "opus" => "high".into(),
+            _ => String::new(),
+        },
         modello: match model.as_str() {
             "auto" => String::new(),
             // Fable non ha un alias in Claude Code: si usa il nome del modello
