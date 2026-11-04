@@ -4,6 +4,7 @@
 
 use super::{str_arg, Esito};
 use base64::Engine;
+use chromiumoxide::cdp::browser_protocol::input::{DispatchMouseEventParams, DispatchMouseEventType, MouseButton};
 use chromiumoxide::page::ScreenshotParams;
 use chromiumoxide::{Browser, BrowserConfig, Page};
 use futures::StreamExt;
@@ -45,8 +46,33 @@ pub struct Sessione {
 /// Il browser degli agenti si vede sullo schermo? (Predefinito: no, lavora senza finestre)
 static VISIBILE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// Mostrato su richiesta dell'agente (per far accedere l'utente): resta visibile fino al riavvio
+static MOSTRATO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Larghezza dell'ultimo screenshot: le coordinate dei clic arrivano in quello spazio
+static LARGHEZZA_FOTO: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
 pub fn imposta_visibile(v: bool) {
-    VISIBILE.store(v, std::sync::atomic::Ordering::Relaxed);
+    VISIBILE.store(v || MOSTRATO.load(std::sync::atomic::Ordering::Relaxed), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Da coordinate dello screenshot a coordinate della pagina (lo screenshot è in pixel del dispositivo e ridotto).
+async fn punto(p: &Page, input: &Value, kx: &str, ky: &str) -> Result<(f64, f64), String> {
+    let (x, y) = (input[kx].as_f64().ok_or(format!("Manca {kx}"))?, input[ky].as_f64().ok_or(format!("Manca {ky}"))?);
+    let w = js(p, "window.innerWidth").await?.as_f64().unwrap_or(1280.0);
+    let foto = LARGHEZZA_FOTO.load(std::sync::atomic::Ordering::Relaxed) as f64;
+    let k = if foto > 0.0 { w / foto } else { 1.0 };
+    Ok((x * k, y * k))
+}
+
+async fn mouse(p: &Page, tipo: DispatchMouseEventType, x: f64, y: f64, premuto: bool, dy: f64) -> Result<(), String> {
+    let mut b = DispatchMouseEventParams::builder().r#type(tipo.clone()).x(x).y(y);
+    b = match tipo {
+        DispatchMouseEventType::MouseWheel => b.delta_x(0.0).delta_y(dy),
+        DispatchMouseEventType::MouseMoved => b.button(if premuto { MouseButton::Left } else { MouseButton::None }).buttons(if premuto { 1 } else { 0 }),
+        _ => b.button(MouseButton::Left).buttons(if premuto { 1 } else { 0 }).click_count(1),
+    };
+    p.execute(b.build()?).await.map_err(|e| format!("Mouse non riuscito: {e}"))?;
+    Ok(())
 }
 
 pub fn sessione() -> &'static Sessione {
@@ -186,9 +212,25 @@ pub async fn esegui(nome: &str, input: &Value, profilo: &Path, domini: &[String]
 }
 
 async fn esegui_r(nome: &str, input: &Value, profilo: &Path, domini: &[String], cartella: Option<PathBuf>) -> Result<Esito, String> {
+    if nome == "web_mostra" {
+        // Riapre il browser con la finestra sulla stessa pagina: il profilo è lo stesso, l'accesso fatto lì resta
+        let prima = match sessione().inner.lock().await.as_ref() {
+            Some((_, p, _)) => p.url().await.ok().flatten(),
+            None => None,
+        };
+        MOSTRATO.store(true, std::sync::atomic::Ordering::Relaxed);
+        VISIBILE.store(true, std::sync::atomic::Ordering::Relaxed);
+        let p = sessione().pagina(profilo).await?;
+        if let Some(u) = prima.filter(|u| u.starts_with("http")) {
+            let _ = p.goto(u.as_str()).await;
+            attendi_pagina(&p).await;
+        }
+        let _ = p.bring_to_front().await;
+        return Ok(Esito::ok("La finestra del browser è aperta davanti all'utente. Se serve un accesso, chiedigli di farlo lui in questa finestra e di dirti quando ha finito; poi continua (l'accesso resta anche le volte successive).", json!({ "kind": "browser", "text": "Finestra del browser mostrata" })));
+    }
     let p = sessione().pagina(profilo).await?;
     let corrente = p.url().await.ok().flatten().unwrap_or_default();
-    let modifica = !matches!(nome, "web_snapshot" | "web_testo" | "web_screenshot" | "web_trova" | "web_apri");
+    let modifica = !matches!(nome, "web_snapshot" | "web_testo" | "web_screenshot" | "web_trova" | "web_apri" | "web_scorri");
     if modifica && corrente.starts_with("http") && !consentito(&corrente, domini) {
         return Err(format!("Questo agente non può agire su {}", dominio(&corrente)));
     }
@@ -229,6 +271,7 @@ async fn esegui_r(nome: &str, input: &Value, profilo: &Path, domini: &[String], 
             let mut buf = std::io::Cursor::new(Vec::new());
             img.write_to(&mut buf, image::ImageFormat::Png).map_err(|e| e.to_string())?;
             let bytes = buf.into_inner();
+            LARGHEZZA_FOTO.store(img.width(), std::sync::atomic::Ordering::Relaxed);
             let path = cartella.and_then(|c| {
                 std::fs::create_dir_all(&c).ok()?;
                 let f = c.join(format!("web-{}.png", uuid::Uuid::new_v4().simple()));
@@ -248,6 +291,39 @@ async fn esegui_r(nome: &str, input: &Value, profilo: &Path, domini: &[String], 
                 e.testo = format!("Cliccato [{rif}]. Pagina attuale:\n{}", e.testo);
                 e
             })
+        }
+        "web_clicca_punto" => {
+            let (x, y) = punto(&p, input, "x", "y").await?;
+            mouse(&p, DispatchMouseEventType::MouseMoved, x, y, false, 0.0).await?;
+            for _ in 0..if input["doppio"].as_bool() == Some(true) { 2 } else { 1 } {
+                mouse(&p, DispatchMouseEventType::MousePressed, x, y, true, 0.0).await?;
+                mouse(&p, DispatchMouseEventType::MouseReleased, x, y, false, 0.0).await?;
+            }
+            tokio::time::sleep(Duration::from_millis(400)).await;
+            Ok(Esito::ok(format!("Cliccato nel punto ({}, {}). Fai uno screenshot per vedere il risultato.", input["x"], input["y"]), json!({ "kind": "browser", "url": corrente, "text": "Clic nel punto" })))
+        }
+        "web_trascina" => {
+            let (x0, y0) = punto(&p, input, "da_x", "da_y").await?;
+            let (x1, y1) = punto(&p, input, "a_x", "a_y").await?;
+            mouse(&p, DispatchMouseEventType::MouseMoved, x0, y0, false, 0.0).await?;
+            mouse(&p, DispatchMouseEventType::MousePressed, x0, y0, true, 0.0).await?;
+            // A piccoli passi: le scene 3D e i drag and drop seguono il movimento, non il salto
+            for i in 1..=20 {
+                let t = i as f64 / 20.0;
+                mouse(&p, DispatchMouseEventType::MouseMoved, x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, true, 0.0).await?;
+                tokio::time::sleep(Duration::from_millis(15)).await;
+            }
+            mouse(&p, DispatchMouseEventType::MouseReleased, x1, y1, false, 0.0).await?;
+            tokio::time::sleep(Duration::from_millis(400)).await;
+            Ok(Esito::ok("Trascinato. Fai uno screenshot per vedere il risultato.", json!({ "kind": "browser", "url": corrente, "text": "Trascinamento" })))
+        }
+        "web_scorri" => {
+            let (x, y) = punto(&p, input, "x", "y").await?;
+            let dy = input["quanto"].as_f64().unwrap_or(400.0);
+            mouse(&p, DispatchMouseEventType::MouseMoved, x, y, false, 0.0).await?;
+            mouse(&p, DispatchMouseEventType::MouseWheel, x, y, false, dy).await?;
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            Ok(Esito::ok(format!("Rotella di {dy} nel punto ({}, {}).", input["x"], input["y"]), json!({ "kind": "browser", "url": corrente, "text": "Scorrimento" })))
         }
         "web_compila" => {
             let t = str_arg(input, "testo");
@@ -318,6 +394,36 @@ mod tests {
     }
 
     /// Prova vera con Chrome: `cargo test browser_vero -- --ignored --nocapture`
+    #[tokio::test]
+    #[ignore]
+    async fn mouse_su_canvas() {
+        let profilo = std::env::temp_dir().join(format!("oltremare-browser-{}", uuid::Uuid::new_v4()));
+        let pagina = std::env::temp_dir().join("oltremare-canvas.html");
+        // Come una scena 3D: un canvas che riceve solo eventi del puntatore, nessun elemento cliccabile
+        std::fs::write(&pagina, r#"<html><body style="margin:0"><canvas id="c" width="800" height="600"></canvas><script>
+window.log=[];const c=document.getElementById('c');
+c.addEventListener('pointerdown',e=>log.push('giu '+e.clientX+','+e.clientY));
+c.addEventListener('pointermove',e=>{if(e.buttons)log.push('muove')});
+c.addEventListener('pointerup',e=>log.push('su '+e.clientX+','+e.clientY));
+c.addEventListener('wheel',e=>log.push('rotella '+Math.sign(e.deltaY)));
+</script></body></html>"#).unwrap();
+        let p = sessione().pagina(&profilo).await.unwrap();
+        p.goto(format!("file://{}", pagina.display()).as_str()).await.unwrap();
+        let w = js(&p, "window.innerWidth").await.unwrap().as_f64().unwrap();
+        LARGHEZZA_FOTO.store(w as u32, std::sync::atomic::Ordering::Relaxed);
+        let t = esegui("web_trascina", &json!({"da_x": 100, "da_y": 100, "a_x": 300, "a_y": 200}), &profilo, &[], None).await;
+        assert!(!t.is_error, "{}", t.testo);
+        let c = esegui("web_clicca_punto", &json!({"x": 50, "y": 60}), &profilo, &[], None).await;
+        assert!(!c.is_error, "{}", c.testo);
+        let r = esegui("web_scorri", &json!({"x": 200, "y": 200, "quanto": -300}), &profilo, &[], None).await;
+        assert!(!r.is_error, "{}", r.testo);
+        let log = js(&p, "log.join('|')").await.unwrap();
+        let log = log.as_str().unwrap();
+        println!("{log}");
+        assert!(log.starts_with("giu 100,100|muove") && log.contains("su 300,200") && log.contains("giu 50,60|su 50,60") && log.ends_with("rotella -1"), "{log}");
+        sessione().chiudi().await;
+    }
+
     #[tokio::test]
     #[ignore]
     async fn browser_vero() {

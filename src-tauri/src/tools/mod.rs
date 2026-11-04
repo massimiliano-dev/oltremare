@@ -396,6 +396,26 @@ Aspetta qualche secondo e restituisce le prime righe e gli indirizzi locali aper
         schema: || obj(&[("ref", i("Numero di un campo o del pulsante del modulo"))], &["ref"]),
     },
     ToolSpec {
+        nome: "web_clicca_punto", etichetta: "Cliccare in un punto", categoria: "browser", rischio: Rischio::Write, parallelo: false, input_grande: false,
+        descrizione: "Clicca in un punto della pagina, con le coordinate in pixel dell'ultimo web_screenshot. Per ciò che non ha un numero nello snapshot: scene 3D, mappe, canvas, editor grafici. Dopo, guarda con web_screenshot.",
+        schema: || obj(&[("x", i("Ascissa nello screenshot")), ("y", i("Ordinata nello screenshot")), ("doppio", json!({ "type": "boolean", "description": "Doppio clic" }))], &["x", "y"]),
+    },
+    ToolSpec {
+        nome: "web_trascina", etichetta: "Trascinare nella pagina", categoria: "browser", rischio: Rischio::Write, parallelo: false, input_grande: false,
+        descrizione: "Trascina con il mouse da un punto a un altro (coordinate dell'ultimo web_screenshot): spostare oggetti, ruotare una vista 3D, drag and drop.",
+        schema: || obj(&[("da_x", i("Partenza x")), ("da_y", i("Partenza y")), ("a_x", i("Arrivo x")), ("a_y", i("Arrivo y"))], &["da_x", "da_y", "a_x", "a_y"]),
+    },
+    ToolSpec {
+        nome: "web_scorri", etichetta: "Scorrere o zoomare", categoria: "browser", rischio: Rischio::Read, parallelo: false, input_grande: false,
+        descrizione: "Gira la rotella del mouse in un punto (coordinate dell'ultimo web_screenshot): scorre la pagina o zooma una vista 3D o una mappa. quanto > 0 scende o allontana, < 0 sale o avvicina.",
+        schema: || obj(&[("x", i("Ascissa")), ("y", i("Ordinata")), ("quanto", i("Pixel di rotella, es. 400 o -400"))], &["x", "y"]),
+    },
+    ToolSpec {
+        nome: "web_mostra", etichetta: "Mostrare il browser", categoria: "browser", rischio: Rischio::Read, parallelo: false, input_grande: false,
+        descrizione: "Porta davanti all'utente la finestra del browser sulla pagina attuale. Usalo quando serve che l'utente faccia lui qualcosa (accedere con la sua password, risolvere un captcha), poi chiedigli di dirti quando ha finito.",
+        schema: || obj(&[], &[]),
+    },
+    ToolSpec {
         nome: "web_indietro", etichetta: "Tornare indietro", categoria: "browser", rischio: Rischio::Write, parallelo: false, input_grande: false,
         descrizione: "Torna alla pagina precedente.",
         schema: || obj(&[], &[]),
@@ -469,6 +489,14 @@ pub fn abilitati(tools: &[String]) -> Vec<&'static ToolSpec> {
 /// Strumenti di un agente: i suoi, più la memoria quando è attiva (vale per tutti gli agenti).
 pub fn dell_agente(tools: &[String], s: &crate::store::Settings) -> Vec<&'static ToolSpec> {
     let mut v = abilitati(tools);
+    // Chi ha il browser lo ha tutto (anche le azioni aggiunte dopo che l'agente è stato creato)
+    if v.iter().any(|t| t.categoria == "browser") {
+        for t in tutti().filter(|t| t.categoria == "browser") {
+            if !v.iter().any(|x| x.nome == t.nome) {
+                v.push(t);
+            }
+        }
+    }
     if crate::memoria::cartella(s).is_some() {
         for t in tutti().filter(|t| t.categoria == "memoria") {
             if !v.iter().any(|x| x.nome == t.nome) {
@@ -717,6 +745,10 @@ pub fn titolo(nome: &str, input: &Value) -> String {
         "web_compila" => format!("Scrive «{}» nel campo [{}]", a("testo").chars().take(40).collect::<String>(), input["ref"]),
         "web_seleziona" => format!("Sceglie «{}» nel menu [{}]", a("valore"), input["ref"]),
         "web_invia_form" => "Invia il modulo".into(),
+        "web_clicca_punto" => format!("Clicca nel punto ({}, {})", input["x"], input["y"]),
+        "web_trascina" => format!("Trascina da ({}, {}) a ({}, {})", input["da_x"], input["da_y"], input["a_x"], input["a_y"]),
+        "web_scorri" => "Scorre la pagina".into(),
+        "web_mostra" => "Mostra il browser".into(),
         "web_indietro" => "Torna indietro".into(),
         "apri_app" => format!("Apre {}", a("nome")),
         "memoria_cerca" => format!("Cerca «{}» in memoria", a("query")),
