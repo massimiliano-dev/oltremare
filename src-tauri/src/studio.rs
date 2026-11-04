@@ -660,7 +660,7 @@ pub async fn studio_review(handle: AppHandle, project: String, text: String, mod
         },
         modo: "default".into(),
         solo_lettura: true,
-        max_turns: Some(25),
+        max_turns: None,
         effort: String::new(),
         ambiente,
         istruzioni: format!("{CTO}{}", memoria.unwrap_or_default()),
@@ -801,7 +801,7 @@ pub async fn studio_run(handle: AppHandle, project: String, text: String, model:
     let o = Opzioni {
         cartelle,
         solo_lettura: false,
-        max_turns: if plan { Some(30) } else { None },
+        max_turns: None,
         // Più ragionamento dove conta: Fable al massimo utile, Opus alto, il resto predefinito
         effort: match model.as_str() {
             "fable" => "xhigh".into(),
@@ -878,7 +878,7 @@ pub async fn studio_second_opinion(handle: AppHandle, project: String, profile: 
     } else {
         "Fai una code review delle modifiche non ancora committate nella cartella corrente (usa git diff): bug, casi limite, sicurezza, semplificazioni. Elenca i problemi in ordine di gravità, con file e riga, in italiano.".to_string()
     };
-    let o = Opzioni { modo: "plan".into(), ambiente, max_turns: Some(25), ..Default::default() };
+    let o = Opzioni { modo: "plan".into(), ambiente, ..Default::default() };
     let mut cmd = sviluppo::comando_headless_con(&bin, &p, &richiesta, None, &s, &o);
     cmd.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null());
     let out = tokio::time::timeout(Duration::from_secs(600), cmd.output()).await.map_err(|_| AppError::msg("Il secondo parere ha impiegato troppo tempo"))?.map_err(|e| AppError::msg(e.to_string()))?;
