@@ -87,6 +87,10 @@ pub async fn git_diff_completo(cartella: &Path, max: usize) -> String {
     };
     let mut out = esegui(&["diff", "--no-color", "--no-ext-diff", "-U3", "HEAD"]).await;
     let nuovi = esegui(&["ls-files", "--others", "--exclude-standard"]).await;
+    let tutti: Vec<&str> = nuovi.lines().collect();
+    if tutti.len() > 30 {
+        out.push_str(&format!("\n\n[{} file nuovi in tutto: qui sotto i primi 30. Gli altri, da leggere:]\n{}", tutti.len(), tutti[30..].join("\n")));
+    }
     for f in nuovi.lines().take(30) {
         if let Ok(t) = std::fs::read_to_string(cartella.join(f)) {
             if t.chars().count() < 40_000 {
@@ -197,7 +201,7 @@ pub(crate) fn comando_headless_con(bin: &Path, cartella: &Path, messaggio: &str,
         .arg(json!({ "permissions": { "ask": DA_CHIEDERE } }).to_string())
         .arg("--append-system-prompt")
         .arg(format!(
-            "Lavori su richiesta dell'utente tramite il suo assistente Oltremare, senza poter fare domande: decidi in modo ragionevole e dichiara le scelte. Puoi fare commit, merge e push sul ramo su cui lavori quando il lavoro è verificato (build e test), e portare un rilascio fino in fondo se te lo chiedono; evita di forzare o riscrivere la storia (--force, rebase, reset --hard) e, se tocchi main, dillo chiaramente nel riepilogo. Puoi lanciare qualsiasi comando del terminale, anche le CLI dei cloud (az, gcloud, vercel, firebase, docker…) con le credenziali già attive dell'utente: indaga e verifica da solo invece di chiedere all'utente di farlo. Per le azioni che cambiano la produzione (deploy, riavvii, scalature, migrazioni sul database vero) procedi solo se la richiesta lo chiede o lo rende necessario, e scrivile nel riepilogo. Le azioni che non si recuperano (cancellazioni di risorse, force push, rm -rf…) puoi tentarle: Oltremare chiede il permesso all'utente e, se dice sì, proseguono; se lo nega, non riprovare e proponi un'alternativa. Alla fine scrivi un riepilogo breve: cosa hai cambiato, come verificarlo, cosa resta da fare.\nPer vedere e provare l'app (o navigare un sito) usa Claude in Chrome (strumenti mcp__claude-in-chrome__*): è il Chrome dell'utente, che ti guarda lavorare. Crea una scheda nuova e lavora lì, senza toccare le schede già aperte; alla fine lasciala sull'ultima pagina utile.{}",
+            "Lavori su richiesta dell'utente tramite il suo assistente Oltremare, senza poter fare domande: decidi in modo ragionevole e dichiara le scelte. Puoi fare commit, merge e push sul ramo su cui lavori quando il lavoro è verificato (build e test), e portare un rilascio fino in fondo se te lo chiedono; evita di forzare o riscrivere la storia (--force, rebase, reset --hard) e, se tocchi main, dillo chiaramente nel riepilogo. Puoi lanciare qualsiasi comando del terminale, anche le CLI dei cloud (az, gcloud, vercel, firebase, docker…) con le credenziali già attive dell'utente: indaga e verifica da solo invece di chiedere all'utente di farlo. Per le azioni che cambiano la produzione (deploy, riavvii, scalature, migrazioni sul database vero) procedi solo se la richiesta lo chiede o lo rende necessario, e scrivile nel riepilogo. Le azioni che non si recuperano (cancellazioni di risorse, force push, rm -rf…) puoi tentarle: Oltremare chiede il permesso all'utente e, se dice sì, proseguono; se lo nega, non riprovare e proponi un'alternativa. Prima del riepilogo finale ferma i processi che hai avviato in background (server di sviluppo, watch, comandi lunghi): finché restano accesi il lavoro risulta ancora in corso e l'utente aspetta; se serve provare l'app, scrivi il comando per avviarla. Alla fine scrivi un riepilogo breve: cosa hai cambiato, come verificarlo, cosa resta da fare.\nPer vedere e provare l'app (o navigare un sito) usa Claude in Chrome (strumenti mcp__claude-in-chrome__*): è il Chrome dell'utente, che ti guarda lavorare. Crea una scheda nuova e lavora lì, senza toccare le schede già aperte; alla fine lasciala sull'ultima pagina utile.{}",
             if o.istruzioni.is_empty() { String::new() } else { format!("\n{}", o.istruzioni) }
         ));
     let modello = if !o.modello.is_empty() { o.modello.clone() } else { s.claude_code_model.clone() };
@@ -816,6 +820,29 @@ pub fn ferma_tutti_headless() {
     }
 }
 
+/// Dopo il risultato, un processo rimasto acceso in background (un server di sviluppo) tiene aperto Claude Code
+/// e il lavoro sembra non finire mai: se per 3 minuti non arriva più nulla e nessun sotto-agente lavora, si chiude.
+fn chiudi_se_inattivo(cartella: PathBuf, sid: std::sync::Arc<std::sync::Mutex<String>>, lette: std::sync::Arc<std::sync::atomic::AtomicU64>) {
+    let prima = lette.load(std::sync::atomic::Ordering::Relaxed);
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(180)).await;
+        if lette.load(std::sync::atomic::Ordering::Relaxed) != prima {
+            return;
+        }
+        let id = sid.lock().map(|x| x.clone()).unwrap_or_default();
+        let Some(file) = sessioni(&cartella).into_iter().map(|(f, _)| f).find(|f| f.file_stem().is_some_and(|s| s.to_string_lossy() == id)) else { return };
+        let occupati = crate::squadra::leggi_squadra(&file, true).map(|v| v["agents"].as_array().is_some_and(|a| a.iter().any(|x| x["running"] == true))).unwrap_or(true);
+        if occupati {
+            return;
+        }
+        let h = HEADLESS.lock().unwrap_or_else(|e| e.into_inner()).get(&cartella).map(|h| (h.figlio.clone(), h.pid));
+        if let Some((figlio, pid)) = h {
+            let mut f = figlio.lock().await;
+            super::shell::uccidi(&mut f, pid).await;
+        }
+    });
+}
+
 async fn avvia_headless(app: &AppHandle, cartella: &Path, messaggio: &str, sessione: Option<String>) -> Result<String, String> {
     avvia_headless_con(app, cartella, messaggio, sessione, Opzioni::default()).await
 }
@@ -854,7 +881,9 @@ pub async fn avvia_headless_con(app: &AppHandle, cartella: &Path, messaggio: &st
             let mut tx = Some(tx);
             let mut ultimo: Option<(bool, String)> = None;
             let mut righe = BufReader::new(stdout).lines();
+            let lette = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
             while let Ok(Some(r)) = righe.next_line().await {
+                lette.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let Ok(v) = serde_json::from_str::<Value>(&r) else { continue };
                 if let Some(id) = v["session_id"].as_str().filter(|x| !x.is_empty()) {
                     *sid.lock().unwrap_or_else(|e| e.into_inner()) = id.to_string();
@@ -871,6 +900,7 @@ pub async fn avvia_headless_con(app: &AppHandle, cartella: &Path, messaggio: &st
                     // Con sotto-agenti in background il risultato arriva più volte (al lancio e alla ripresa):
                     // il lavoro è finito solo quando il processo esce, e conta l'ultimo
                     ultimo = Some((v["is_error"].as_bool() == Some(true), v["result"].as_str().unwrap_or_default().to_string()));
+                    chiudi_se_inattivo(cartella.clone(), sid.clone(), lette.clone());
                     // Consumi del lavoro, come per gli agenti
                     let u = &v["usage"];
                     let usage = crate::providers::Usage {

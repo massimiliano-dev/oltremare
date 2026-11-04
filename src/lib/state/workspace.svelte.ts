@@ -41,11 +41,13 @@ export interface Task {
   fixRounds?: number;
   /** Il lavoro si è fermato sulle proposte grafiche: la prossima risposta dell'utente è la scelta */
   proposals?: boolean;
+  /** Riprese automatiche dopo un errore temporaneo del servizio */
+  retries?: number;
 }
 
 /** Regola fissa dell'utente per il lavoro visivo: prima vedere come verrebbe, con più proposte. */
 const PROPOSTE = `[Lavoro grafico: PRIMA LE PROPOSTE. Non modificare ancora il codice del progetto.
-Prepara 3 proposte visive davvero diverse (direzione, composizione, tipografia, colore; non varianti di colore della stessa idea), anche se l'utente ha dato indicazioni precise: una le segue alla lettera, le altre le interpretano o le spingono oltre. Parti dall'identità del progetto (DESIGN.md, PRODUCT.md, la descrizione dell'utente); dallo «Stile grafico» dell'utente prendi qualità, processo e cose da evitare, senza copiarne la palette in un progetto che ha un'identità sua. Usa le skill impeccable (e design-taste-frontend se c'è); puoi lanciare in parallelo un sotto-agente oltremare-frontend per proposta.
+Prepara 3 proposte visive davvero diverse (direzione, composizione, tipografia, colore; non varianti di colore della stessa idea), anche se l'utente ha dato indicazioni precise: una le segue alla lettera, le altre le interpretano o le spingono oltre. Se la richiesta richiama un progetto o un marchio esistente, tutte e tre restano nella sua identità (font, palette, struttura) e cambiano composizione e dettagli. Parti dall'identità del progetto (DESIGN.md, PRODUCT.md, la descrizione dell'utente); dallo «Stile grafico» dell'utente prendi qualità, processo e cose da evitare, senza copiarne la palette in un progetto che ha un'identità sua. Usa le skill impeccable (e design-taste-frontend se c'è); puoi lanciare in parallelo un sotto-agente oltremare-frontend per proposta.
 Ogni proposta è una pagina HTML statica in .oltremare/proposte/<AAAAMMGG-HHMM>/proposta-N.html con contenuti, font e token veri del progetto (se la schermata esiste già, ridisegna quella con i suoi dati reali); controlla che .oltremare/.gitignore contenga «*».
 Fai lo screenshot di ciascuna (1440×900, e 390×844 se il progetto è per telefono) con Chrome senza finestra: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars --window-size=1440,900 --screenshot=<file.png> file://<file.html>. Guarda le immagini e sistema ciò che non va prima di mostrarle.
 Messaggio finale: per ogni proposta il nome, due righe sull'idea e il percorso assoluto dello screenshot (l'utente vede l'anteprima). Chiudi chiedendo quale preferisce o cosa mescolare, e fermati lì.]`;
@@ -273,7 +275,9 @@ export class Workspace {
     const task: Task = { id: ++this.taskId, text: text.trim(), decision: null, model: seguito && this.modelChoice === "auto" ? prec.model : this.modelChoice, plan: this.planChoice === "yes", profile: this.profile, session: null, phase: "deciding", fixRounds: 0, files };
     this.tasks = [...this.tasks, task];
     const invio = annullato
-      ? `[L'utente ha annullato il piano/lavoro precedente: non proseguirlo e non darlo per approvato. Questa è la nuova richiesta, da valutare da capo.]\n${task.text}`
+      ? prec.dropped
+        ? `[L'utente ha scartato il piano precedente: non eseguirlo e non darlo per approvato. Questa è la nuova richiesta, da valutare da capo.]\n${task.text}`
+        : `[L'utente ha fermato il lavoro precedente: non riprenderlo da solo. Questa è la nuova richiesta; se riguarda lo stesso lavoro, parti da ciò che è già fatto su disco.]\n${task.text}`
       : seguito && prec.proposals
         ? `${SCELTA}\n${task.text}`
         : seguito
@@ -416,6 +420,22 @@ export class Workspace {
       this.drain();
       return;
     }
+    // Errore temporaneo del servizio (500, sovraccarico): si riprende da soli, senza revisione su un lavoro a metà
+    if ((t.phase === "planning" || t.phase === "working") && t.session) {
+      const fine = [...(this.dev.session?.items ?? [])].reverse().find((i) => i.kind === "text")?.text?.trim() ?? "";
+      if (/^API Error: (5\d\d|429)|overloaded|Internal server error/i.test(fine)) {
+        if ((t.retries ?? 0) < 2) {
+          t.retries = (t.retries ?? 0) + 1;
+          ui.toast("Il servizio di Claude ha dato un errore temporaneo: riprendo da solo tra 20 secondi");
+          setTimeout(() => this.resume(t), 20_000);
+          return;
+        }
+        t.phase = "error";
+        t.error = fine;
+        this.drain();
+        return;
+      }
+    }
     if (t.phase === "planning" && t.session) {
       const r = await api.studioPlan(this.path, t.session).catch(() => ({ plan: "" }));
       t.planText = r.plan;
@@ -460,6 +480,21 @@ export class Workspace {
       }
     }
     this.drain();
+  }
+
+  /** Riprende nella stessa sessione il lavoro interrotto da un errore del servizio. */
+  private async resume(t: Task) {
+    if (this.lastTask !== t || this.dev.session?.running || !["planning", "working"].includes(t.phase)) return;
+    try {
+      const r = await api.studioRun(this.path, "[Il lavoro si è interrotto per un errore temporaneo del servizio. Riprendi da dove eri: prima controlla cosa c'è già su disco e cosa hanno lasciato i sotto-agenti, poi rilancia solo ciò che manca.]", t.model, t.phase === "planning", t.profile || undefined, t.session ?? undefined, false);
+      t.session = r.session;
+      this.dev.sessionId = r.session || null;
+      this.dev.refreshSession();
+    } catch (e) {
+      t.phase = "error";
+      t.error = errorText(e);
+      this.drain();
+    }
   }
 
   /** Il CTO rivede tutto ciò che ha toccato file (non le domande), a meno che l'utente scelga altrimenti. */

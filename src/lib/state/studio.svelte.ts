@@ -86,7 +86,9 @@ class StudioState {
     const path = await api.studioCreateProject(root, name, description);
     await this.loadProjects();
     const prompt = description.trim()
-      ? `Nuovo progetto, cartella vuota (c'è solo il README). Costruiscilo: ${description.trim()}\nScegli uno stack moderno e adatto, crea lo scheletro funzionante con i comandi di avvio, build e test, fai il primo commit e scrivi nel README come avviarlo. La grafica conta quanto il codice: prima di scrivere l'interfaccia carica la skill impeccable (e design-taste-frontend se c'è) e dai al progetto un'identità visiva curata fin da subito, scritta in PRODUCT.md e DESIGN.md nella radice, poi controlla il risultato nel browser con Claude in Chrome.`
+      ? `Nuovo progetto, cartella vuota (c'è solo il README). Costruiscilo: ${description.trim()}
+Non uno scheletro: un prodotto completo e usabile, alla qualità di un progetto vero. Se la richiesta richiama un progetto esistente («sulla falsa riga di…», «come…», «stessa architettura di…»), leggilo a fondo ed ereditane tutto: stack, architettura, funzioni di base (login, registrazione e recupero password, impostazioni, gestione utenti), infrastruttura e deploy, font, palette e struttura grafica; cambia solo ciò che il nuovo dominio richiede, senza semplificare. Altrimenti scegli uno stack moderno e adatto.
+Comandi di avvio, build e test funzionanti, README con l'avvio, commit. La grafica conta quanto il codice: PRODUCT.md e DESIGN.md nella radice, skill impeccable, risultato controllato nel browser con Claude in Chrome. Nel riepilogo elenca con onestà cosa manca ancora.`
       : undefined;
     await this.open(path, { prompt });
   }
