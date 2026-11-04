@@ -75,6 +75,19 @@ async fn mouse(p: &Page, tipo: DispatchMouseEventType, x: f64, y: f64, premuto: 
     Ok(())
 }
 
+/// L'app in primo piano (macOS), per restituirle lo schermo dopo l'avvio del browser.
+fn app_davanti() -> Option<String> {
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
+    let asn = std::process::Command::new("lsappinfo").arg("front").output().ok()?;
+    let asn = String::from_utf8_lossy(&asn.stdout).trim().to_string();
+    let info = std::process::Command::new("lsappinfo").args(["info", "-only", "bundleid", &asn]).output().ok()?;
+    let t = String::from_utf8_lossy(&info.stdout);
+    let id = t.split('=').nth(1)?.trim().trim_matches('"').to_string();
+    (!id.is_empty() && id != "com.google.Chrome").then_some(id)
+}
+
 pub fn sessione() -> &'static Sessione {
     static S: std::sync::OnceLock<Sessione> = std::sync::OnceLock::new();
     S.get_or_init(|| Sessione { inner: tokio::sync::Mutex::new(None) })
@@ -141,7 +154,13 @@ impl Sessione {
             .args(["--no-first-run", "--no-default-browser-check", "--lang=it-IT"])
             .build()
             .map_err(|e| format!("Configurazione del browser non valida: {e}"))?;
+        let davanti = if visibile { app_davanti() } else { None };
         let (browser, mut handler) = Browser::launch(cfg).await.map_err(|e| format!("Il browser non si avvia: {e}"))?;
+        // Chrome con la finestra si prende lo schermo all'avvio: si ridà il primo piano all'app che l'utente stava usando
+        if let Some(id) = davanti {
+            tokio::time::sleep(Duration::from_millis(700)).await;
+            let _ = tokio::process::Command::new("open").args(["-b", &id]).status().await;
+        }
         tauri::async_runtime::spawn(async move { while let Some(h) = handler.next().await { if h.is_err() { break; } } });
         let page = match browser.pages().await.ok().and_then(|p| p.into_iter().next()) {
             Some(p) => p,
@@ -247,7 +266,6 @@ async fn esegui_r(nome: &str, input: &Value, profilo: &Path, domini: &[String], 
             }
             p.goto(url.as_str()).await.map_err(|e| format!("Pagina non raggiungibile: {e}"))?;
             attendi_pagina(&p).await;
-            let _ = p.bring_to_front().await;
             snapshot(&p).await
         }
         "web_snapshot" => snapshot(&p).await,

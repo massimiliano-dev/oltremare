@@ -412,7 +412,7 @@ Aspetta qualche secondo e restituisce le prime righe e gli indirizzi locali aper
     },
     ToolSpec {
         nome: "web_mostra", etichetta: "Mostrare il browser", categoria: "browser", rischio: Rischio::Read, parallelo: false, input_grande: false,
-        descrizione: "Porta davanti all'utente la finestra del browser sulla pagina attuale. Usalo quando serve che l'utente faccia lui qualcosa (accedere con la sua password, risolvere un captcha), poi chiedigli di dirti quando ha finito.",
+        descrizione: "Porta davanti all'utente la finestra del browser sulla pagina attuale. Solo quando serve che l'utente faccia lui qualcosa (accedere con la sua password, risolvere un captcha), poi chiedigli di dirti quando ha finito. Mai per mostrargli il lavoro: ti prenderebbe lo schermo mentre lui fa altro; per fargli vedere il risultato usa web_screenshot.",
         schema: || obj(&[], &[]),
     },
     ToolSpec {
